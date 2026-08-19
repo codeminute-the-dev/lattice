@@ -13,6 +13,11 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# ...but wallet/build is a Go package, not a Python build artifact. Git will
+# not descend into an excluded directory, so the directory itself has to be
+# re-included before its contents can be.
+!wallet/build/
+!wallet/build/**
 develop-eggs/
 dist/
 downloads/
