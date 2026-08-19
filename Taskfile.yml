@@ -66,6 +66,12 @@ tasks:
       - mkdir -p bin
       - CGO_ENABLED=0 go build -o bin/latwalletcli -v ./wallet/cmd/latwalletcli
 
+  build:latwalletgui:
+    desc: Build latwalletgui (local web UI for a running latwallet)
+    cmds:
+      - mkdir -p bin
+      - CGO_ENABLED=0 go build -o bin/latwalletgui -v ./wallet/cmd/latwalletgui
+
   build:lattice:
     desc: Build latticed and latctl
     deps: [build:latticed, build:latctl]
