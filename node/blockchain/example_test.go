@@ -69,7 +69,7 @@ func ExampleBlockChain_ProcessBlock() {
 	fmt.Printf("Block accepted. Is it an orphan?: %v", isOrphan)
 
 	// Output:
-	// Failed to process block: already have block 77d253054598f522400274e052adee07f52b757016532a902e8ad1c8eb15a230
+	// Failed to process block: already have block 012600a8fc2ec5a42da37df8caa6b874ae61ec3a472cc9cd743e3c53cfa9819f
 }
 
 // This example demonstrates how to convert the compact "bits" in a block header

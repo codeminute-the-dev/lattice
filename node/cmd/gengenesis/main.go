@@ -82,10 +82,13 @@ func main() {
 	merkle := cb.TxHash()
 
 	nets := []net{
-		{"main", "genesisHash", "genesisMerkleRoot", "genesisBlock", 1786518000, 0x1b00ffff},
+		// Each genesis header carries its network's PowLimitBits, so the
+		// first block satisfies the same difficulty floor the chain enforces
+		// from then on.
+		{"main", "genesisHash", "genesisMerkleRoot", "genesisBlock", 1786518000, 0x1e010000},
 		{"regression test", "regTestGenesisHash", "regTestGenesisMerkleRoot", "regTestGenesisBlock", 1786258800, 0x1e010000},
-		{"test", "testNetGenesisHash", "testNetGenesisMerkleRoot", "testNetGenesisBlock", 1786431600, 0x1d00ffff},
-		{"test2", "testNet2GenesisHash", "testNet2GenesisMerkleRoot", "testNet2GenesisBlock", 1786345200, 0x1d00ffff},
+		{"test", "testNetGenesisHash", "testNetGenesisMerkleRoot", "testNetGenesisBlock", 1786431600, 0x1e010000},
+		{"test2", "testNet2GenesisHash", "testNet2GenesisMerkleRoot", "testNet2GenesisBlock", 1786345200, 0x1e010000},
 		{"simulation test", "simNetGenesisHash", "simNetGenesisMerkleRoot", "simNetGenesisBlock", 1786172400, 0x207fffff},
 		{"signet test", "sigNetGenesisHash", "sigNetGenesisMerkleRoot", "sigNetGenesisBlock", 1786086000, 0x1d0fffff},
 	}

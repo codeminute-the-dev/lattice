@@ -24,13 +24,20 @@ var (
 	// the overhead of creating it multiple times.
 	bigOne = big.NewInt(1)
 
-	// mainPowLimit is the highest proof of work value a block can
-	// have for the main network.  It is the value 2^208 - 1.
-	mainPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 208), bigOne)
+	// mainPowLimit is the easiest proof of work target a block may have on
+	// the main network: the value 2^233 - 1.
+	//
+	// Pearl's value was 2^208 - 1, which presumes an established network's
+	// hashrate. A chain starting from zero cannot climb that — its floor
+	// alone demands on the order of 2.8e14 attempts per block — so Lattice
+	// launches at the same floor the test networks use, roughly 1.7e7
+	// attempts. WTEMA raises the difficulty from there as real hashrate
+	// arrives, so this only sets how the chain starts, not where it settles.
+	mainPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 233), bigOne)
 
-	// testPowLimit is the highest proof of work value a block can
-	// have for the test network.  It is the value 2^208 - 1.
-	testPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 208), bigOne)
+	// testPowLimit is the easiest proof of work target a block may have on
+	// the test network.  It is the value 2^233 - 1.
+	testPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 233), bigOne)
 
 	// regressionPowLimit is the highest proof of work value a Lattice block
 	// can have for the regression test network.
@@ -356,7 +363,7 @@ var MainNetParams = Params{
 	GenesisBlock:         &genesisBlock,
 	GenesisHash:          &genesisHash,
 	PowLimit:             mainPowLimit,
-	PowLimitBits:         0x1b00ffff,
+	PowLimitBits:         0x1e010000,
 	CoinbaseMaturity:     100,
 	TargetTimePerBlock:   time.Second * 40, // 40 seconds
 	WTEMAHalfLife:        time.Hour * 24,   // 1 day (2,160 blocks at 40s)
@@ -553,7 +560,7 @@ var TestNetParams = Params{
 	GenesisBlock:         &testNetGenesisBlock,
 	GenesisHash:          &testNetGenesisHash,
 	PowLimit:             testPowLimit,
-	PowLimitBits:         0x1b00ffff,
+	PowLimitBits:         0x1e010000,
 	CoinbaseMaturity:     100,
 	TargetTimePerBlock:   time.Second * 40, // 40 seconds
 	WTEMAHalfLife:        time.Hour * 24,   // 1 day (2,160 blocks at 40s)
@@ -649,7 +656,7 @@ var TestNet2Params = Params{
 	GenesisBlock:         &testNet2GenesisBlock,
 	GenesisHash:          &testNet2GenesisHash,
 	PowLimit:             testPowLimit,
-	PowLimitBits:         0x1b00ffff,
+	PowLimitBits:         0x1e010000,
 	CoinbaseMaturity:     100,
 	TargetTimePerBlock:   time.Second * 40, // 40 seconds
 	WTEMAHalfLife:        time.Hour * 24,   // 1 day (2,160 blocks at 40s)
