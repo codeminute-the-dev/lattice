@@ -175,7 +175,10 @@ attn_test.py
 *.pth
 *.ipynb
 notebooks/
-bin/
+# Build output only. This must stay anchored to the repo root: an unanchored
+# "bin/" also matches Rust source directories such as zk-pow/src/bin, which
+# silently drops build_cache.rs from the repo and leaves a clone unbuildable.
+/bin/
 !apps/**/bin
 simnet_data
 
