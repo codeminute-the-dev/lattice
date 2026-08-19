@@ -116,3 +116,24 @@ The wallet UI prints a fresh token each start:
 ```bash
 journalctl --user -u latwalletgui -n 5 | grep http
 ```
+
+## Checking after a reboot
+
+```bash
+bash deploy/healthcheck.sh
+```
+
+It checks all seven units are active *and* enabled, that linger is on, that Tor
+is up with a SOCKS listener, that the node has a peer and is advancing, and that
+every web endpoint answers including the public one.
+
+The peer check is the one that earns its keep. A node with no peers looks
+perfectly healthy — it starts, it syncs, it answers RPC — but the CPU miner
+exits its loop while `ConnectedCount() == 0` and logs nothing about it. The
+symptom is a chain that quietly stops growing.
+
+Tor is a system unit and the rest are user units, so systemd cannot order them
+against each other. If `latticed` wins the race at boot, its first outbound
+onion dials fail and then retry; inbound reachability is Tor's own business and
+is unaffected. Nothing to fix, but it explains a few seconds of noise in the log
+right after a reboot.
