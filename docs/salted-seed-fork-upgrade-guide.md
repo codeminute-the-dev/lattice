@@ -1,43 +1,41 @@
-# Salted-Seed Hard Fork Upgrade Guide for Miners and Mining Pools
+# The V3 (Salted-Seed) Certificate
 
-Lattice is doing a hard fork. At a fixed block height (the **fork height**), blocks switch
-from the V2 (MoE) ZK certificate to the new V3 (salted noise-seed) certificate.
+> **Lattice has no V2→V3 migration.** Every Lattice network activates V3 at height 1
+> (`SaltedSeedForkHeight: 1`), so there is no era of this chain in which V2 blocks were
+> ever valid. This document is the V3 derivation reference, kept because pools and
+> custom miners need the spec. The fork Lattice *does* have scheduled is the V4 cutover
+> — see [lattice-seed-fork-upgrade-guide.md](lattice-seed-fork-upgrade-guide.md).
 
-| Network  | Fork height (`SaltedSeedForkHeight`) |
-| -------- | ------------------------------------ |
-| Mainnet  | `99000`                              |
-| Testnet  | `38648`                              |
-| Testnet2 | `83109`                              |
+V3 blocks carry a ZK certificate whose noise seeds are derived from *salted* matrix
+commitments rather than the raw Merkle roots the V2 (MoE) certificate used.
 
 **The short version:**
 
 - V3 changes how the noise seeds are derived from the matrix commitments: each Merkle
   root is first salted with a keyed BLAKE3 hash that also commits the matrix dimensions
   (`m` for A, `n` for B). The ZK circuits, wire formats, and share formats are unchanged.
-- Because the derivation feeds mining itself, **everything must be upgraded before the
-  fork height: node, ZK proving code, and miners.** A miner running old software
-  produces invalid shares from the fork height on. This is different from the MoE fork,
-  where old miners kept working.
-- Upgraded software switches automatically at the fork height. There is nothing to
-  schedule on your side; the certificate version comes from `getblocktemplate` per block.
+- Because the derivation feeds mining itself, **node, ZK proving code, and miners must
+  all agree on it.** A miner deriving seeds the V2 way produces shares Lattice rejects.
+- The certificate version comes from `getblocktemplate` per block. Read it from the
+  template; never hardcode a version or a fork height.
+
+**The salts are Pearl's, deliberately.** Lattice's V3 work function is bit-identical to
+Pearl's, so a third-party miner implementing Pearl's algorithm produces valid Lattice
+work without knowing Lattice exists. The reference miner needs H100-class hardware and
+no independent Lattice miner has been written yet, so that shared domain is the only
+consumer-GPU mining this chain has. It is scheduled to end at `LatticeSeedForkHeight`.
 
 ---
 
-## Step 1: Upgrade your node to v1.4.1
+## Node support
 
-Safe to do at any time before the fork. The node stays fully compatible with V2 blocks
-and shares until the fork height.
+`getblocktemplate` reports `requiredcertversion: 3` from height 1 (and `4` from
+`LatticeSeedForkHeight` on).
 
-`getblocktemplate` reports `requiredcertversion: 3` at and after the fork height
-(`2` before it). As with the MoE fork: read the version from the template, do not
-hardcode the fork height.
+## ZK proving code (pools)
 
-## Step 2: Upgrade your ZK proving code (pools)
-
-Deploy before the fork height, or every block you build after the fork is rejected.
-
-If you followed the MoE fork guide and use the certificate-version dispatchers, you
-only need the new `lattice-mining` package (v0.3.1) — the dispatchers accept version 3:
+If you use the certificate-version dispatchers, the `lattice-mining` package handles
+version 3:
 
 - `check_cert_version_eligible`, `generate_proof_for_cert_version`,
   `verify_proof_for_cert_version`, and `verify_plain_proof_for_cert_version` handle
@@ -64,19 +62,16 @@ Only if you serialize certificates yourself: the V3 wire layout is identical to 
 ProofData`) with `3` in the version field, and the header's proof commitment is
 `double_sha256(cert_version_le32 + public_data)` with the prefix now `3`.
 
-## Step 3: Upgrade your miners
+## Miners
 
-Unlike the MoE fork, this is required: V3 share noise uses salted seeds, so
-mining software that derives seeds the old way produces invalid shares from
-the fork height on. Pools should expect
+V3 share noise uses salted seeds, so mining software that derives seeds the V2 way
+produces invalid shares. Pools should expect
 `verify_plain_proof_for_cert_version(3, ...)` to reject them.
 
-If you run the reference miner stack (vllm-miner + gateway), upgrading is all you
-need. The mining job now carries `cert_version` (and it is a required field of
-`submitPlainProof`); the miner reads it per job and salts when the job requires V3.
-Deploy at any time before the fork — it switches automatically at the fork height.
+The mining job carries `cert_version` (a required field of `submitPlainProof`); the
+miner reads it per job and salts when the job requires V3.
 
-If you built custom mining software, implement the new derivation:
+If you built custom mining software, implement the derivation:
 
 1. Compute the keyed Merkle roots of A and B exactly as today (`hash_a`, `hash_b`).
    The wire formats do not change; shares still carry the raw roots.
@@ -84,8 +79,8 @@ If you built custom mining software, implement the new derivation:
    before the (unchanged) seed chain:
 
    ```text
-   bound_a = blake3(hash_a || m_le32 || 0^28, key = blake3("lattice/cert-v3/noise-seed/A"))
-   bound_b = blake3(hash_b || n_le32 || 0^28, key = blake3("lattice/cert-v3/noise-seed/B"))
+   bound_a = blake3(hash_a || m_le32 || 0^28, key = blake3("pearl/cert-v3/noise-seed/A"))
+   bound_b = blake3(hash_b || n_le32 || 0^28, key = blake3("pearl/cert-v3/noise-seed/B"))
    ```
 
    Each message is exactly one 64-byte BLAKE3 block: the 32-byte root, the

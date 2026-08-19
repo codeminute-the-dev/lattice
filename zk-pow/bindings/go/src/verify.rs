@@ -178,6 +178,33 @@ pub unsafe extern "C" fn verify_zk_proof_v3_with_nbits(
     )
 }
 
+/// `verify_zk_proof_v2` with the Lattice-domain salted (V4) noise-seed derivation.
+#[no_mangle]
+pub unsafe extern "C" fn verify_zk_proof_v4(
+    block_header: *const IncompleteBlockHeader,
+    zk_proof: *const CZKProof,
+    error_msg_out: *mut c_char,
+) -> i32 {
+    verify_zk_proof_inner(block_header, zk_proof, None, SeedDerivation::SaltedLattice, error_msg_out)
+}
+
+/// `verify_zk_proof_v4` with the difficulty from `nbits_override`.
+#[no_mangle]
+pub unsafe extern "C" fn verify_zk_proof_v4_with_nbits(
+    block_header: *const IncompleteBlockHeader,
+    zk_proof: *const CZKProof,
+    nbits_override: u32,
+    error_msg_out: *mut c_char,
+) -> i32 {
+    verify_zk_proof_inner(
+        block_header,
+        zk_proof,
+        Some(nbits_override),
+        SeedDerivation::SaltedLattice,
+        error_msg_out,
+    )
+}
+
 /// Check wire `public_data` against the rank-penalty rule.
 ///
 /// # Returns

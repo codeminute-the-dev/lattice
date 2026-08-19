@@ -249,6 +249,50 @@ func TestShippedNetworksForkHeights(t *testing.T) {
 	}
 }
 
+// TestShippedNetworksLatticeSeedForkHeights pins the heights at which each
+// network leaves the proof-of-work domain it shares with Pearl.
+//
+// The shared domain is what lets a third-party miner for Pearl's algorithm
+// produce valid Lattice blocks, which is the only consumer-GPU mining this
+// chain has. Moving these heights changes when that stops working, so they are
+// pinned rather than left to drift.
+func TestShippedNetworksLatticeSeedForkHeights(t *testing.T) {
+	want := map[string]struct {
+		params *Params
+		height int32
+	}{
+		// Six months of 40-second blocks.
+		"mainnet": {&MainNetParams, 394200},
+		// Twenty days, so the testnets rehearse the cutover first.
+		"testnet":  {&TestNetParams, 43200},
+		"testnet2": {&TestNet2Params, 43200},
+		// Disabled: neither network verifies a proof by default.
+		"regtest": {&RegressionNetParams, 0},
+		"simnet":  {&SimNetParams, 0},
+	}
+	for name, tc := range want {
+		p := tc.params
+		require.Equalf(t, tc.height, p.LatticeSeedForkHeight,
+			"%s Lattice-domain seed fork height", name)
+
+		if tc.height == 0 {
+			require.Falsef(t, p.IsLatticeSeedForkActive(1_000_000),
+				"%s must never activate the Lattice-domain seed fork", name)
+			continue
+		}
+
+		// V4 supersedes V3, so it must not activate first.
+		require.GreaterOrEqualf(t, p.LatticeSeedForkHeight, p.SaltedSeedForkHeight,
+			"%s must not activate the Lattice-domain fork before the salted-seed fork", name)
+
+		// The cutover itself: V3 up to the height, V4 from it on.
+		require.Equalf(t, wire.CertificateVersionV3, p.RequiredCertVersion(tc.height-1),
+			"%s must still require V3 the block before the fork", name)
+		require.Equalf(t, wire.CertificateVersionV4, p.RequiredCertVersion(tc.height),
+			"%s must require V4 from the fork height on", name)
+	}
+}
+
 // compactToBig is a copy of the blockchain.CompactToBig function. We copy it
 // here so we don't run into a circular dependency just because of a test.
 func compactToBig(compact uint32) *big.Int {

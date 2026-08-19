@@ -23,6 +23,10 @@ func SolveBlock(header *wire.BlockHeader, params *chaincfg.Params, height int32)
 
 	if params.Net == wire.SimNet {
 		switch version {
+		case wire.CertificateVersionV4:
+			cert := &wire.CertificateV4{}
+			cert.ProofData = []byte{0x00}
+			return cert, nil
 		case wire.CertificateVersionV3:
 			cert := &wire.CertificateV3{}
 			cert.ProofData = []byte{0x00}

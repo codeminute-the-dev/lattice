@@ -224,3 +224,69 @@ func TestCertificateV3_MineVerifyRoundTrip(t *testing.T) {
 	require.Error(t, zkpow.VerifyCertificate(&relabeledHeader, asV2),
 		"V3 proof must not verify under the legacy (V2) derivation")
 }
+
+// ============================================================================
+// CertificateV4 Tests
+// ============================================================================
+
+// TestCertificateV4_MineVerifyRoundTrip mines a real V4 certificate and checks
+// the property the whole fork exists for: a V4 proof is salted under Lattice's
+// own seed domain, so it does not verify as V3 and vice versa. If these two
+// ever verified interchangeably, the cutover would be cosmetic and Pearl's
+// hashrate would still be pointable at this chain.
+func TestCertificateV4_MineVerifyRoundTrip(t *testing.T) {
+	header := testBlockHeader()
+
+	cert, err := zkpow.Mine(&header, wire.CertificateVersionV4)
+	require.NoError(t, err, "V4 mining should succeed")
+	v4, ok := cert.(*wire.CertificateV4)
+	require.True(t, ok, "mined certificate should be CertificateV4")
+	require.Equal(t, wire.CertificateVersionV4, v4.Version())
+
+	require.NoError(t, zkpow.VerifyCertificate(&header, v4),
+		"valid CertificateV4 should verify")
+
+	// The commitment must hash version 4, not the embedded V3's version.
+	require.NotEqual(t, v4.CertificateV3.ProofCommitment(), v4.ProofCommitment(),
+		"V4 proof commitment must be domain-separated from V3")
+
+	// Wire round-trip through MsgCertificate.
+	msg := &wire.MsgCertificate{Certificate: v4}
+	var buf bytes.Buffer
+	require.NoError(t, msg.LatEncode(&buf, wire.ProtocolVersion))
+	decoded := &wire.MsgCertificate{}
+	require.NoError(t, decoded.LatDecode(bytes.NewReader(buf.Bytes()), wire.ProtocolVersion))
+	decodedV4, ok := decoded.Certificate.(*wire.CertificateV4)
+	require.True(t, ok, "decoded certificate should be CertificateV4")
+	require.Equal(t, v4.Hash, decodedV4.Hash)
+	require.Equal(t, v4.PublicDataLen, decodedV4.PublicDataLen)
+
+	// A V4 proof re-labeled as V3 must be rejected: different seed salts.
+	asV3 := &wire.CertificateV3{CertificateV2: wire.CertificateV2{
+		PublicDataLen: v4.PublicDataLen,
+		PublicData:    v4.PublicData,
+		ProofData:     v4.ProofData,
+	}}
+	relabeledHeader := header
+	relabeledHeader.ProofCommitment = asV3.ProofCommitment()
+	asV3.Hash = relabeledHeader.BlockHash()
+	require.Error(t, zkpow.VerifyCertificate(&relabeledHeader, asV3),
+		"V4 proof must not verify under the Pearl-domain (V3) derivation")
+
+	// And the converse: a V3 proof must not verify as V4.
+	v3Cert, err := zkpow.Mine(&header, wire.CertificateVersionV3)
+	require.NoError(t, err, "V3 mining should succeed")
+	v3 := v3Cert.(*wire.CertificateV3)
+	asV4 := &wire.CertificateV4{CertificateV3: wire.CertificateV3{
+		CertificateV2: wire.CertificateV2{
+			PublicDataLen: v3.PublicDataLen,
+			PublicData:    v3.PublicData,
+			ProofData:     v3.ProofData,
+		},
+	}}
+	relabeledHeader = header
+	relabeledHeader.ProofCommitment = asV4.ProofCommitment()
+	asV4.Hash = relabeledHeader.BlockHash()
+	require.Error(t, zkpow.VerifyCertificate(&relabeledHeader, asV4),
+		"V3 proof must not verify under the Lattice-domain (V4) derivation")
+}

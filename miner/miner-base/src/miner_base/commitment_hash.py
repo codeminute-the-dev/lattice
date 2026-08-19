@@ -5,9 +5,16 @@ from lattice_mining import MiningConfiguration
 
 from .matrix_merkle_tree import MatrixMerkleTree
 
-# Domain-separation salts for the V3 (salted noise-seed) certificate derivation:
-SEED_SALT_A = blake3(b"lattice/cert-v3/noise-seed/A").digest()
-SEED_SALT_B = blake3(b"lattice/cert-v3/noise-seed/B").digest()
+# Domain-separation salts for the V3 (salted noise-seed) certificate derivation.
+# These are Pearl's, deliberately: Lattice's V3 work function is bit-identical
+# to Pearl's so that a third-party miner for Pearl's algorithm does valid
+# Lattice work. See zk-pow/src/api/seed.rs.
+SEED_SALT_A = blake3(b"pearl/cert-v3/noise-seed/A").digest()
+SEED_SALT_B = blake3(b"pearl/cert-v3/noise-seed/B").digest()
+
+# V4 salts: Lattice's own domain, in force from LatticeSeedForkHeight onward.
+LATTICE_SEED_SALT_A = blake3(b"lattice/cert-v4/noise-seed/A").digest()
+LATTICE_SEED_SALT_B = blake3(b"lattice/cert-v4/noise-seed/B").digest()
 
 # root(32) || dim u32 LE(4) || zero padding(28) = one 64-byte BLAKE3 block.
 _BIND_PAD = b"\x00" * 28

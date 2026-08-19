@@ -118,6 +118,15 @@ fn generate_proof_v3(
     generate_proof_impl(block_header, plain_proof, SeedDerivation::Salted)
 }
 
+/// V4 proving: same circuits as V3, salted under Lattice's own seed domain.
+#[pyfunction]
+fn generate_proof_v4(
+    block_header: IncompleteBlockHeader,
+    plain_proof: PlainProof,
+) -> PyResult<PyProof> {
+    generate_proof_impl(block_header, plain_proof, SeedDerivation::SaltedLattice)
+}
+
 fn verify_proof_impl(
     block_header: IncompleteBlockHeader,
     proof: &PyProof,
@@ -162,6 +171,15 @@ fn verify_proof_v3(
     proof: &PyProof,
 ) -> PyResult<(bool, String)> {
     verify_proof_impl(block_header, proof, SeedDerivation::Salted)
+}
+
+/// V4 (Lattice-domain noise-seed) verification: same circuits and cache as V3.
+#[pyfunction]
+fn verify_proof_v4(
+    block_header: IncompleteBlockHeader,
+    proof: &PyProof,
+) -> PyResult<(bool, String)> {
+    verify_proof_impl(block_header, proof, SeedDerivation::SaltedLattice)
 }
 
 #[pyfunction]
@@ -222,6 +240,22 @@ fn verify_plain_proof_v3(
         plain_proof,
         nbits_override,
         SeedDerivation::Salted,
+    )
+}
+
+/// V4 (Lattice-domain noise-seed) plain-proof verification.
+#[pyfunction]
+#[pyo3(signature = (block_header, plain_proof, nbits_override=None))]
+fn verify_plain_proof_v4(
+    block_header: IncompleteBlockHeader,
+    plain_proof: PlainProof,
+    nbits_override: Option<u32>,
+) -> PyResult<(bool, String)> {
+    verify_plain_proof_impl(
+        block_header,
+        plain_proof,
+        nbits_override,
+        SeedDerivation::SaltedLattice,
     )
 }
 
@@ -451,6 +485,7 @@ fn generate_proof_for_cert_version(
         CertificateVersion::ZkDense => generate_proof_v1(block_header, plain_proof),
         CertificateVersion::ZkMoe => generate_proof_v2(block_header, plain_proof),
         CertificateVersion::ZkV3 => generate_proof_v3(block_header, plain_proof),
+        CertificateVersion::ZkV4 => generate_proof_v4(block_header, plain_proof),
     }
 }
 
@@ -465,6 +500,7 @@ fn verify_proof_for_cert_version(
         CertificateVersion::ZkDense => verify_proof_v1(block_header, proof),
         CertificateVersion::ZkMoe => verify_proof_v2(block_header, proof),
         CertificateVersion::ZkV3 => verify_proof_v3(block_header, proof),
+        CertificateVersion::ZkV4 => verify_proof_v4(block_header, proof),
     }
 }
 
@@ -485,6 +521,9 @@ fn verify_plain_proof_for_cert_version(
         }
         CertificateVersion::ZkV3 => {
             verify_plain_proof_v3(block_header, plain_proof, nbits_override)
+        }
+        CertificateVersion::ZkV4 => {
+            verify_plain_proof_v4(block_header, plain_proof, nbits_override)
         }
     }
 }
@@ -546,6 +585,10 @@ fn lattice_mining(m: &Bound<'_, pyo3::types::PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_proof_v3, m)?)?;
     m.add_function(wrap_pyfunction!(verify_proof_v3, m)?)?;
     m.add_function(wrap_pyfunction!(verify_plain_proof_v3, m)?)?;
+    // V4 functions (same circuits as V3; Lattice-domain noise-seed salts)
+    m.add_function(wrap_pyfunction!(generate_proof_v4, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_proof_v4, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_plain_proof_v4, m)?)?;
     // V1 functions (legacy circuit; dense proofs only)
     m.add(
         "V1_PUBLICDATA_SIZE",
@@ -560,6 +603,7 @@ fn lattice_mining(m: &Bound<'_, pyo3::types::PyModule>) -> PyResult<()> {
     m.add("CERT_VERSION_ZK_DENSE", CertificateVersion::ZkDense as u32)?;
     m.add("CERT_VERSION_ZK_MOE", CertificateVersion::ZkMoe as u32)?;
     m.add("CERT_VERSION_ZK_V3", CertificateVersion::ZkV3 as u32)?;
+    m.add("CERT_VERSION_ZK_V4", CertificateVersion::ZkV4 as u32)?;
     m.add_function(wrap_pyfunction!(py_check_cert_version_eligible, m)?)?;
     m.add_function(wrap_pyfunction!(generate_proof_for_cert_version, m)?)?;
     m.add_function(wrap_pyfunction!(verify_proof_for_cert_version, m)?)?;

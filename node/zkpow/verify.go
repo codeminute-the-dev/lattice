@@ -35,11 +35,14 @@ const MinNoiseRank = C.MIN_NOISE_RANK
 
 // VerifyCertificate performs sanity checks followed by cryptographic proof verification.
 // It returns an error if the certificate is invalid or does not match the header.
+// V4 certificates (CertificateV4) share the V3 layout but salt under Lattice's own seed domain.
 // V3 certificates (CertificateV3) share the V2 layout but use the salted noise-seed derivation.
 // V2 certificates (CertificateV2) handle both MoE and non-MoE new proofs.
 // V1 certificates (CertificateV1) are verified using the V1 proof format.
 func VerifyCertificate(header *wire.BlockHeader, cert wire.BlockCertificate) error {
 	switch c := cert.(type) {
+	case *wire.CertificateV4:
+		return verifyCertificateV4(header, c)
 	case *wire.CertificateV3:
 		return verifyCertificateV3(header, c)
 	case *wire.CertificateV2:
@@ -99,7 +102,7 @@ func verifyCertificateV1(header *wire.BlockHeader, c *wire.CertificateV1) error 
 }
 
 // ================================================================================
-// V2/V3 CERTIFICATE VERIFICATION
+// V2/V3/V4 CERTIFICATE VERIFICATION
 // ================================================================================
 
 func verifyCertificateV2(header *wire.BlockHeader, c *wire.CertificateV2) error {
@@ -110,7 +113,11 @@ func verifyCertificateV3(header *wire.BlockHeader, c *wire.CertificateV3) error 
 	return VerifyZKProofFFI(header, c, nil)
 }
 
-// VerifyZKProofFFI verifies a V2/V3-layout ZK proof via the Rust FFI.
+func verifyCertificateV4(header *wire.BlockHeader, c *wire.CertificateV4) error {
+	return VerifyZKProofFFI(header, c, nil)
+}
+
+// VerifyZKProofFFI verifies a V2/V3/V4-layout ZK proof via the Rust FFI.
 func VerifyZKProofFFI(
 	header *wire.BlockHeader,
 	cert wire.BlockCertificate,
@@ -169,6 +176,12 @@ func VerifyZKProofFFI(
 			result = C.verify_zk_proof_v3_with_nbits(&cBlockHeader, &cZKProof, C.uint32_t(*nbitsOverride), &errorBuf[0])
 		} else {
 			result = C.verify_zk_proof_v3(&cBlockHeader, &cZKProof, &errorBuf[0])
+		}
+	case wire.CertificateVersionV4:
+		if nbitsOverride != nil {
+			result = C.verify_zk_proof_v4_with_nbits(&cBlockHeader, &cZKProof, C.uint32_t(*nbitsOverride), &errorBuf[0])
+		} else {
+			result = C.verify_zk_proof_v4(&cBlockHeader, &cZKProof, &errorBuf[0])
 		}
 	default:
 		return fmt.Errorf("unsupported certificate version %d for FFI verification", cert.Version())
