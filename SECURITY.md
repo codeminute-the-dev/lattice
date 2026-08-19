@@ -48,7 +48,7 @@ unless anonymity is requested.
 
 ## Bug Bounty
 
-the Lattice contributors may, at its sole discretion, offer rewards in LATT for
+The Lattice contributors may, at their sole discretion, offer rewards in LATT for
 qualifying security reports. This is a voluntary recognition program, not a
 contractual offer, contest, or guarantee of payment.
 

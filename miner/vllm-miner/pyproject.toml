@@ -25,7 +25,7 @@ name = "vllm-miner"
 version = "0.1.0"
 description = "A high-performance plugin-based quantized linear kernel for vLLM with NoisyGEMM"
 authors = [
-  {name = "Lattice Research", email = "research@lattice.codeminute.dev"}
+  {name = "Lattice contributors"}
 ]
 dependencies = [
   "PyYAML>=6.0.1",

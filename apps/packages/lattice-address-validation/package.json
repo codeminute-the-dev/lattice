@@ -33,8 +33,8 @@
     "witness-v1"
   ],
   "author": {
-    "name": "Liad Madmon",
-    "email": "liad.madmon@lattice.codeminute.dev",
+    "name": "Lattice contributors",
+    "url": "https://github.com/codeminute-the-dev/lattice",
     "url": "https://lattice.codeminute.dev"
   },
   "license": "MIT",

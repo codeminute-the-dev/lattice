@@ -203,4 +203,4 @@ See the main Lattice repository for license information.
 For support and questions, please visit:
 
 - Website: [lattice.codeminute.dev](https://lattice.codeminute.dev)
-- Email: support@lattice.codeminute.dev
+- Issues: [github.com/codeminute-the-dev/lattice/issues](https://github.com/codeminute-the-dev/lattice/issues)

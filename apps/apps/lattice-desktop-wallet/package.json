@@ -4,7 +4,7 @@
   "description": "Lattice Desktop Wallet - A modern cryptocurrency wallet application",
   "author": {
     "name": "the Lattice contributors",
-    "email": "support@lattice.codeminute.dev"
+    "url": "https://github.com/codeminute-the-dev/lattice"
   },
   "private": true,
   "type": "module",

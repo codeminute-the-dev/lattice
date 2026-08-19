@@ -13,5 +13,11 @@ all backgrounds and experience levels.
 
 ## Enforcement
 
-Violations may be reported to **conduct@lattice.codeminute.dev**. Maintainers may
-remove comments, close issues, or ban contributors at their discretion.
+Violations may be reported by opening an issue, or privately via
+[GitHub's report-abuse flow](https://github.com/contact/report-abuse) if the
+matter is sensitive. Maintainers may remove comments, close issues, or ban
+contributors at their discretion.
+
+There is no project email address: the domain has no mail server, so any
+address ending in `@lattice.codeminute.dev` is not real and mail sent to one
+will bounce.
