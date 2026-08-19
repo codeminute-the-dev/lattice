@@ -1,0 +1,42 @@
+ffldb
+=====
+
+[![Build Status](https://github.com/codeminute-the-dev/lattice/workflows/Build%20and%20Test/badge.svg)](https://github.com/codeminute-the-dev/lattice/actions)
+[![ISC License](http://img.shields.io/badge/license-ISC-blue.svg)](http://copyfree.org)
+[![GoDoc](https://pkg.go.dev/github.com/codeminute-the-dev/lattice/node/database/ffldb?status.png)](https://pkg.go.dev/github.com/codeminute-the-dev/lattice/node/database/ffldb)
+=======
+
+Package ffldb implements a driver for the database package that uses leveldb for
+the backing metadata and flat files for block storage.
+
+This driver is the recommended driver for use with latticed.  It makes use leveldb
+for the metadata, flat files for block storage, and checksums in key areas to
+ensure data integrity.
+
+Package ffldb is licensed under the copyfree ISC license.
+
+## Usage
+
+This package is a driver to the database package and provides the database type
+of "ffldb".  The parameters the Open and Create functions take are the
+database path as a string, the block network, and an optional cache flush
+interval in seconds (defaults to 3600).
+
+```Go
+db, err := database.Open("ffldb", "path/to/database", wire.MainNet)
+if err != nil {
+	// Handle error
+}
+```
+
+```Go
+db, err := database.Create("ffldb", "path/to/database", wire.MainNet)
+if err != nil {
+	// Handle error
+}
+```
+
+## License
+
+Package ffldb is licensed under the [copyfree](http://copyfree.org) ISC
+License.

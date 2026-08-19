@@ -1,0 +1,69 @@
+[project]
+name = "Lattice"
+version = "0.1.0"
+description = "Lattice monorepo workspace"
+requires-python = "==3.12.*"
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+# vLLM 0.20.2+cu130 allows transformers 5.x (see wheel requires-dist); default resolution
+# stayed on 4.57.x. Gemma 4 checkpoints need transformers>=5.5 with model_type gemma4.
+[tool.uv]
+override-dependencies = [
+  "transformers>=5.5.1,<6",
+  "cuda-bindings>=13.0,<13.1",
+  "cuda-python>=13.0,<13.1",
+]
+
+# Workspace sources - these apply globally to all members
+[tool.uv.sources]
+miner-utils = {workspace = true}
+miner-base = {workspace = true}
+lattice-gateway = {workspace = true}
+py-lattice-mining = {workspace = true}
+vllm-miner = {workspace = true}
+lattice-gemm-build-utils = {workspace = true}
+lattice-gemm = {workspace = true}
+# use torch compiled against nvidia runtime
+torch = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchaudio = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["miner", "miner/vllm-miner/tests"]
+markers = [
+    "integration: marks tests as integration tests (may require external services)",
+    "schema: marks tests as schema validation tests",
+    "https: marks tests as HTTPS/TLS connectivity tests",
+    "performance: marks tests as performance tests (throughput, latency, memory)",
+    "slow: marks tests as slow running tests (typically >30 seconds)",
+    "gpu: marks tests that require a CUDA GPU",
+    "moe: marks Mixture-of-Experts (MoE) mining tests",
+]
+python_files = ["test_*.py", "*_test.py"]
+norecursedirs = [".git", ".venv", "venv", ".github", ".pytest_cache", ".mypy_cache", ".ruff_cache", "build", "dist", "third_party"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --import-mode=importlib"
+
+[tool.uv.workspace]
+members = [
+  "miner/miner-utils",
+  "miner/miner-base",
+  "miner/lattice-gateway",
+  "py-lattice-mining",
+  "miner/vllm-miner",
+  "miner/lattice-gemm-build-utils",
+  "miner/lattice-gemm"
+]

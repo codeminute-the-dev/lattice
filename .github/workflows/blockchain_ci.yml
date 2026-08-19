@@ -1,0 +1,103 @@
+name: Blockchain / Build and Test
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOCACHE: /home/runner/work/go/pkg/build
+  GOPATH: /home/runner/work/go
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            should_run:
+              - 'node/**'
+              - 'wallet/**'
+              - 'spv/**'
+              - 'zk-pow/**'
+              - 'plonky2/**'
+              - 'Taskfile.yml'
+              - 'go.mod'
+              - '.github/workflows/blockchain_ci.yml'
+              - '.github/actions/setup/action.yml'
+
+  format-tidy:
+    name: Format and Tidy
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.should_run == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+
+      - name: Format and Tidy
+        run: task fmt:go fmt:rust tidy
+
+      - name: Check for Changed Files
+        id: verify-changed
+        uses: tj-actions/verify-changed-files@a1c6acee9df209257a246f2cc6ae8cb6581c1edf # v20.0.4
+
+      - name: Fail if files changed
+        if: steps.verify-changed.outputs.files_changed == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.verify-changed.outputs.changed_files }}
+        run: |
+          echo "::error::Files were modified by 'task fmt:go fmt:rust tidy'. Please run it locally and commit the changes."
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          exit 1
+
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.should_run == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+
+      - name: Build
+        run: task build:blockchain
+
+      - name: Test
+        run: task test:go GOTESTSUM_FORMAT=pkgname-and-test-fails
+
+  ci_status:
+    name: Blockchain CI Status
+    runs-on: ubuntu-latest
+    needs: [format-tidy, build-and-test]
+    if: always()
+    steps:
+      - run: |
+          result="${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && 'failure' || 'success' }}"
+          echo "Overall result: $result"
+          [ "$result" = 'success' ]

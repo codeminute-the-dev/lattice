@@ -1,0 +1,227 @@
+version: 3
+
+env:
+  CGO_ENABLED: 1
+  CGO_LDFLAGS_ALLOW: ".*zk_pow_ffi.*"
+
+tasks:
+  build:zk-cache:
+    desc: Generate verifier circuit caches (main + v1, one-time)
+    run: once
+    dir: zk-pow
+    status:
+      - test -s src/circuit/v2_cache.bin
+      - test -s src/v1/v1_cache.bin
+    cmds:
+      - cargo run --release --no-default-features --bin build_cache src/circuit/v2_cache.bin src/v1/v1_cache.bin
+
+  build:zk-gobind:
+    desc: Build the Rust ZK verification library for Go FFI
+    run: once
+    deps: [build:zk-cache]
+    dir: zk-pow/bindings/go
+    cmds:
+      - cargo build --release
+
+  build:libxmss:
+    desc: Build the XMSS static library for Go FFI
+    run: once
+    dir: xmss
+    status:
+      - test -f libxmss.a
+    cmds:
+      - make CC={{.CC | default "gcc"}} CXX={{.CXX | default "g++"}}
+
+  build:latticed:
+    desc: Build latticed
+
+    deps: [build:zk-gobind, build:libxmss]
+    cmds:
+      - mkdir -p bin
+      - go build -tags xmss,zkpow -o bin/latticed -v ./node
+
+  build:latstatus:
+    desc: Build latstatus (read-only JSON endpoint for the website countdown)
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/latstatus -v ./node/cmd/latstatus
+
+  build:latctl:
+    desc: Build latctl
+    deps: [build:zk-gobind, build:libxmss]
+    cmds:
+      - mkdir -p bin
+      - go build -tags xmss,zkpow -o bin/latctl -v ./node/cmd/latctl
+
+  build:latwallet:
+    desc: Build latwallet
+    deps: [build:zk-gobind, build:libxmss]
+    cmds:
+      - mkdir -p bin
+      - go build -tags xmss,zkpow -o bin/latwallet -v ./wallet
+
+  build:latwalletcli:
+    desc: Build latwalletcli (interactive wallet CLI)
+    cmds:
+      - mkdir -p bin
+      - CGO_ENABLED=0 go build -o bin/latwalletcli -v ./wallet/cmd/latwalletcli
+
+  build:lattice:
+    desc: Build latticed and latctl
+    deps: [build:latticed, build:latctl]
+
+  build:blockchain:
+    desc: Build all blockchain binaries (latticed, latctl, latwallet, latwalletcli)
+    deps: [build:latticed, build:latctl, build:latwallet, build:latwalletcli]
+
+  build:miner:
+    desc: Install miner Python packages (Linux/Windows only; the GPU miner requires CUDA)
+    platforms: [linux, windows]
+    cmds:
+      - uv sync --all-packages
+
+  build:
+    desc: Build all (blockchain + miner)
+    cmds:
+      - task: build:blockchain
+      - task: build:miner
+
+  clean:
+    desc: Remove compiled binaries and test-generated files
+    cmds:
+      - rm -rf bin
+      - rm -f xmss/libxmss.a
+      - rm -f zk-pow/src/circuit/v2_cache.bin zk-pow/src/v1/v1_cache.bin
+      - rm -rf lattice-blake3/target py-lattice-mining/target zk-pow/target zk-pow/bindings/go/target
+      - find . -name coverage.txt -type f -delete
+
+  test:
+    desc: Run all tests (Go + Python)
+    cmds:
+      - task: test:go
+      - task: test:python
+
+  test:go:
+    desc: Run Go tests with race detector
+    deps: [build:zk-gobind, build:libxmss]
+    env:
+      GORACE: "history_size=7 halt_on_errors=1"
+    vars:
+      GOTESTSUM_FORMAT: '{{.GOTESTSUM_FORMAT | default "pkgname"}}'
+      GOTESTSUM_JUNITFILE: '{{.GOTESTSUM_JUNITFILE | default ""}}'
+    cmds:
+      - go tool -modfile tools/go.mod gotestsum --format {{.GOTESTSUM_FORMAT}} {{if .GOTESTSUM_JUNITFILE}}--junitfile {{.GOTESTSUM_JUNITFILE}}{{end}} -- -race -tags=rpctest,xmss,zkpow -test.timeout=45m ./...
+
+  test:python:basic:
+    desc: Run Python tests (excludes integration, performance, and slow)
+    cmds:
+      - uv run pytest -m "not integration and not performance and not slow" miner/
+
+  test:python:
+    desc: Run full Python test suite
+    cmds:
+      - uv run pytest miner/
+
+  fmt:rust:
+    desc: Format Rust code
+    cmds:
+      - task: fmt:rust:lattice-blake3
+      - task: fmt:rust:zk-pow
+      - task: fmt:rust:zk-gobind
+      - task: fmt:rust:py-lattice-mining
+
+  fmt:rust:lattice-blake3:
+    desc: Format lattice-blake3 Rust code
+    dir: lattice-blake3
+    cmds:
+      - cargo fmt
+
+  fmt:rust:zk-pow:
+    desc: Format zk-pow Rust code
+    dir: zk-pow
+    cmds:
+      - cargo fmt
+
+  fmt:rust:zk-gobind:
+    desc: Format zk-pow-go Rust code
+    dir: zk-pow/bindings/go
+    cmds:
+      - cargo fmt
+
+  fmt:rust:py-lattice-mining:
+    desc: Format py-lattice-mining Rust code
+    dir: py-lattice-mining
+    cmds:
+      - cargo fmt
+
+  fmt:go:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+      - go tool -modfile tools/go.mod goimports -w .
+
+  fmt:python:
+    desc: Format Python code
+    cmds:
+      - uv run ruff format .
+
+  fmt:
+    desc: Format all code (Go + Rust + Python)
+    cmds:
+      - task: fmt:go
+      - task: fmt:rust
+      - task: fmt:python
+
+  lint:rust:
+    desc: Lint Rust code with clippy
+    cmds:
+      - task: lint:rust:lattice-blake3
+      - task: lint:rust:zk-pow
+      - task: lint:rust:zk-gobind
+      - task: lint:rust:py-lattice-mining
+
+  lint:rust:lattice-blake3:
+    desc: Lint lattice-blake3 Rust code
+    dir: lattice-blake3
+    cmds:
+      - cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+
+  lint:rust:zk-pow:
+    desc: Lint zk-pow Rust code
+    dir: zk-pow
+    cmds:
+      - cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+
+  lint:rust:zk-gobind:
+    desc: Lint zk-pow-go Rust code
+    dir: zk-pow/bindings/go
+    cmds:
+      - cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+
+  lint:rust:py-lattice-mining:
+    desc: Lint py-lattice-mining Rust code
+    dir: py-lattice-mining
+    cmds:
+      - cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+
+  lint:go:
+    desc: Lint Go code
+    cmds:
+      - go tool -modfile tools/go.mod golangci-lint run -v ./...
+
+  lint:python:
+    desc: Lint Python code with ruff
+    cmds:
+      - uv run ruff check --fix .
+
+  lint:
+    desc: Lint all code (Go + Rust + Python)
+    cmds:
+      - task: lint:go
+      - task: lint:rust
+      - task: lint:python
+
+  tidy:
+    desc: Tidy dependencies
+    cmds:
+      - go mod tidy

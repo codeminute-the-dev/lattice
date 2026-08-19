@@ -1,0 +1,255 @@
+# https://taskfile.dev
+
+version: '3'
+
+# Project configuration
+vars:
+  PKG: github.com/codeminute-the-dev/lattice/node
+  LINT_PKG: github.com/golangci/golangci-lint/cmd/golangci-lint
+  LINT_COMMIT: v1.18.0
+  DEV_TAGS: rpctest,xmss,zkpow
+  GO_FILES: $(find . -type f -name '*.go' -not -path "./vendor/*")
+  TEST_TIMEOUT: 20m
+  RACE_FLAGS: history_size=7 halt_on_errors=1
+
+# ============
+# Main targets
+# ============
+
+tasks:
+  default:
+    desc: Build the project
+    cmds:
+      - task build
+
+  all:
+    desc: Build and test the project
+    cmds:
+      - task build
+      - task check
+
+# ============
+# Dependencies
+# ============
+
+  deps:
+    desc: Install development dependencies
+    cmds:
+      - go install golang.org/x/tools/cmd/goimports@latest
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
+    status:
+      - which goimports > /dev/null 2>&1
+      - which golangci-lint > /dev/null 2>&1
+
+
+# ============
+# Build targets
+# ============
+
+  build:zk-cache:
+    desc: Generate verifier circuit cache (one-time, ~20s)
+    dir: ../zk-pow
+    status:
+      - test -s src/circuit/cache.bin
+    cmds:
+      - cargo run --release --bin build_cache src/circuit/cache.bin
+
+  build:zk-gobind:
+    desc: Build the Rust ZK verification library for Go FFI
+    deps: [build:zk-cache]
+    dir: ../zk-pow/bindings/go
+    cmds:
+      - cargo build --release
+
+  build:
+    desc: Build all binaries
+    deps: [build:zk-gobind]
+    env:
+      CGO_ENABLED: 1
+    cmds:
+      - mkdir -p bin
+      - go build -tags xmss,zkpow -v -o bin/latticed {{.PKG}}
+      - go build -tags xmss,zkpow -v -o bin/latctl {{.PKG}}/cmd/latctl
+      - go build -tags xmss,zkpow -v -o bin/gencerts {{.PKG}}/cmd/gencerts
+      - go build -tags xmss,zkpow -v -o bin/findcheckpoint {{.PKG}}/cmd/findcheckpoint
+      - go build -tags xmss,zkpow -v -o bin/addblock {{.PKG}}/cmd/addblock
+
+  install:
+    desc: Install all binaries to $GOPATH/bin
+    deps: [build:zk-gobind]
+    env:
+      CGO_ENABLED: 1
+    cmds:
+      - go build -tags xmss,zkpow -v -o $(go env GOPATH)/bin/latticed {{.PKG}}
+      - go build -tags xmss,zkpow -v -o $(go env GOPATH)/bin/latctl {{.PKG}}/cmd/latctl
+      - go build -tags xmss,zkpow -v -o $(go env GOPATH)/bin/gencerts {{.PKG}}/cmd/gencerts
+      - go build -tags xmss,zkpow -v -o $(go env GOPATH)/bin/findcheckpoint {{.PKG}}/cmd/findcheckpoint
+      - go build -tags xmss,zkpow -v -o $(go env GOPATH)/bin/addblock {{.PKG}}/cmd/addblock
+
+  release-install:
+    desc: Install release binaries with stripped symbols
+    deps: [build:zk-gobind]
+    env:
+      CGO_ENABLED: 1
+    cmds:
+      - go build -tags xmss,zkpow -v -trimpath -ldflags="-s -w -buildid=" -o $(go env GOPATH)/bin/latticed {{.PKG}}
+      - go build -tags xmss,zkpow -v -trimpath -ldflags="-s -w -buildid=" -o $(go env GOPATH)/bin/latctl {{.PKG}}/cmd/latctl
+
+# ============
+# Test targets
+# ============
+
+  test:
+    desc: Run all tests
+    deps: [build:zk-gobind]
+    cmds:
+      - task unit-race
+      - task integration
+
+  unit:
+    desc: Run unit tests
+    deps: [build:zk-gobind]
+    cmds:
+      - go test -v -tags={{.DEV_TAGS}} ./... -test.timeout={{.TEST_TIMEOUT}}
+      - task unit:btcec
+      - task unit:btcutil
+      - task unit:psbt
+
+  unit:btcec:
+    desc: Run unit tests in btcec directory
+    dir: btcec
+    cmds:
+      - go test -v -tags={{.DEV_TAGS}} ./... -test.timeout={{.TEST_TIMEOUT}}
+
+  unit:btcutil:
+    desc: Run unit tests in btcutil directory
+    dir: btcutil
+    cmds:
+      - go test -v -tags={{.DEV_TAGS}} ./... -test.timeout={{.TEST_TIMEOUT}}
+
+  unit:psbt:
+    desc: Run unit tests in psbt directory
+    dir: btcutil/psbt
+    cmds:
+      - go test -v -tags={{.DEV_TAGS}} ./... -test.timeout={{.TEST_TIMEOUT}}
+
+  unit-cover:
+    desc: Run unit tests with coverage
+    deps: [build:zk-gobind]
+    cmds:
+      - go test -v -coverprofile=coverage.txt -covermode=atomic -coverpkg={{.PKG}}/... ./...
+      - task unit-cover:btcec
+      - task unit-cover:btcutil
+      - task unit-cover:psbt
+
+  unit-cover:btcec:
+    desc: Run unit tests with coverage in btcec directory
+    dir: btcec
+    cmds:
+      - go test -v -coverprofile=coverage.txt -covermode=atomic -coverpkg={{.PKG}}/... ./...
+      - if [ -f coverage.txt ]; then sed -i.bak 's/v2\///g' coverage.txt; fi
+
+  unit-cover:btcutil:
+    desc: Run unit tests with coverage in btcutil directory
+    dir: btcutil
+    cmds:
+      - go test -v -coverprofile=coverage.txt -covermode=atomic -coverpkg={{.PKG}}/... ./...
+
+  unit-cover:psbt:
+    desc: Run unit tests with coverage in psbt directory
+    dir: btcutil/psbt
+    cmds:
+      - go test -v -coverprofile=coverage.txt -covermode=atomic -coverpkg={{.PKG}}/... ./...
+
+  unit-race:
+    desc: Run unit tests with race detection
+    deps: [build:zk-gobind]
+    env:
+      CGO_ENABLED: 1
+      GORACE: "{{.RACE_FLAGS}}"
+    cmds:
+      - go test -v -race -tags={{.DEV_TAGS}} -test.timeout={{.TEST_TIMEOUT}} ./...
+      - task unit-race:btcec
+      - task unit-race:btcutil
+      - task unit-race:psbt
+
+  unit-race:btcec:
+    desc: Run unit tests with race detection in btcec directory
+    dir: btcec
+    env:
+      CGO_ENABLED: 1
+      GORACE: "{{.RACE_FLAGS}}"
+    cmds:
+      - go test -v -race -tags={{.DEV_TAGS}} -test.timeout={{.TEST_TIMEOUT}} ./...
+
+  unit-race:btcutil:
+    desc: Run unit tests with race detection in btcutil directory
+    dir: btcutil
+    env:
+      CGO_ENABLED: 1
+      GORACE: "{{.RACE_FLAGS}}"
+    cmds:
+      - go test -v -race -tags={{.DEV_TAGS}} -test.timeout={{.TEST_TIMEOUT}} ./...
+
+  unit-race:psbt:
+    desc: Run unit tests with race detection in psbt directory
+    dir: btcutil/psbt
+    env:
+      CGO_ENABLED: 1
+      GORACE: "{{.RACE_FLAGS}}"
+    cmds:
+      - go test -v -race -tags={{.DEV_TAGS}} -test.timeout={{.TEST_TIMEOUT}} ./...
+
+  integration:
+    desc: Run integration tests
+    deps: [build:zk-gobind]
+    cmds:
+      - go test -v -tags={{.DEV_TAGS}} ./integration/... -test.timeout={{.TEST_TIMEOUT}}
+
+# ============
+# Development
+# ============
+
+  fmt:
+    desc: Format and fix imports in Go files
+    deps: [deps]
+    cmds:
+      - goimports -w {{.GO_FILES}}
+      - gofmt -l -w -s {{.GO_FILES}}
+
+  lint:
+    desc: Run linter on the codebase
+    deps: [deps]
+    cmds:
+      - golangci-lint run -v ./...
+      - task lint:btcec
+      - task lint:btcutil
+      - task lint:psbt
+
+  lint:btcec:
+    desc: Run linter in btcec directory
+    dir: btcec
+    cmds:
+      - golangci-lint run -v ./...
+
+  lint:btcutil:
+    desc: Run linter in btcutil directory
+    dir: btcutil
+    cmds:
+      - golangci-lint run -v ./...
+
+  lint:psbt:
+    desc: Run linter in psbt directory
+    dir: btcutil/psbt
+    cmds:
+      - golangci-lint run -v ./...
+
+  clean:
+    desc: Remove generated files
+    cmds:
+      - rm -f coverage.txt btcec/coverage.txt btcutil/coverage.txt btcutil/psbt/coverage.txt
+
+  tidy:
+    desc: Run 'go mod tidy' for all modules
+    cmds:
+      - scripts/tidy_modules.sh

@@ -1,0 +1,68 @@
+name: Plonky2 Tests
+
+on:
+  pull_request:
+    paths:
+      - 'plonky2/**'
+      - '.github/workflows/plonky2_ci.yml'
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'plonky2/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Plonky2 Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ./plonky2
+    
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt, clippy
+      
+      - name: Run cargo fmt
+        run: cargo fmt --all --check
+      
+      - name: Run cargo clippy
+        run: cargo clippy --release --all-features --all-targets -- -D warnings -A incomplete-features
+      
+      - name: Set up rust cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: "plonky2 -> target"
+          cache-on-failure: true
+      
+      - name: Run cargo test in release mode
+        run: cargo test --release --workspace
+        env:
+          RUSTFLAGS: -Copt-level=3 -Cdebug-assertions -Coverflow-checks=y -Cdebuginfo=0
+      
+      # Optional: Run specific tests for sub-crates
+      - name: Test plonky2 crate
+        run: cargo test --release --manifest-path plonky2/Cargo.toml
+      
+      - name: Test starky crate  
+        run: cargo test --release --manifest-path starky/Cargo.toml
+      
+      - name: Test field crate
+        run: cargo test --release --manifest-path field/Cargo.toml

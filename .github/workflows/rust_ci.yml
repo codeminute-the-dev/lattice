@@ -1,0 +1,178 @@
+name: Rust CI
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      lattice_blake3: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.lattice_blake3_src == 'true' }}
+      zk_pow: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.lattice_blake3_src == 'true' || steps.filter.outputs.zk_pow_src == 'true' }}
+      py_lattice_mining: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.lattice_blake3_src == 'true' || steps.filter.outputs.zk_pow_src == 'true' || steps.filter.outputs.py_lattice_mining_src == 'true' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            common:
+              - '.github/workflows/rust_ci.yml'
+            lattice_blake3_src:
+              - 'lattice-blake3/**'
+            zk_pow_src:
+              - 'zk-pow/**'
+              - 'plonky2/**'
+            py_lattice_mining_src:
+              - 'py-lattice-mining/**'
+
+  lattice-blake3-tests:
+    name: lattice-blake3 Tests
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.lattice_blake3 == 'true' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: "lattice-blake3 -> target"
+          cache-on-failure: true
+      - name: Check formatting
+        run: cargo fmt --all --check
+        working-directory: lattice-blake3
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: lattice-blake3
+      - name: Run tests
+        run: cargo test
+        working-directory: lattice-blake3
+
+  zk-pow-tests:
+    name: zk-pow Complete Test Suite
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.zk_pow == 'true' }}
+    env:
+      RUSTFLAGS: -Copt-level=3 -Cdebug-assertions -Coverflow-checks=y -Cdebuginfo=0
+    defaults:
+      run:
+        working-directory: zk-pow
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: "zk-pow -> target"
+          cache-on-failure: true
+
+      - name: Install system dependencies (jemalloc)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libjemalloc-dev
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build project and generate verifier cache
+        run: |
+          cargo build --release
+          cargo run --release --bin build_cache src/circuit/v2_cache.bin src/v1/v1_cache.bin
+          cargo build --release --features embedded_cache
+
+      - name: Run tests
+        run: cargo test --release --features embedded_cache
+
+      - name: Test binaries
+        run: cargo test --bins --release --features embedded_cache
+
+      - name: Run doc tests
+        run: cargo test --doc --release --features embedded_cache
+
+      - name: Test layout-macro
+        run: |
+          if [ -d "src/circuit/layout_macro" ]; then
+            cd src/circuit/layout_macro && cargo test --release
+          fi
+
+      - name: Test invalid proofs mode
+        run: cargo run --release --bin prove_verify -- invalid
+
+      - name: Test performance mode
+        run: cargo run --release --bin prove_verify -- performance
+
+      # Go FFI Build
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.26.6'
+
+      - name: Regenerate verifier circuit cache for Go FFI
+        run: cargo run --release --bin build_cache src/circuit/v2_cache.bin src/v1/v1_cache.bin
+
+      - name: Build zk_pow_ffi library for Go FFI
+        run: |
+          cd bindings/go
+          cargo build --release
+
+      - name: Test zk_pow_ffi library for Go FFI
+        run: |
+          cd bindings/go
+          cargo test --release
+
+  py-lattice-mining-tests:
+    name: py-lattice-mining Tests
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.py_lattice_mining == 'true' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: "py-lattice-mining -> target"
+          cache-on-failure: true
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - name: Install system dependencies (jemalloc)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libjemalloc-dev
+      - name: Install package
+        run: uv sync --package py-lattice-mining --no-editable
+      - name: Run tests
+        run: uv run pytest py-lattice-mining/tests/
+
+  ci_status:
+    name: Rust CI Status
+    runs-on: ubuntu-latest
+    needs: [lattice-blake3-tests, zk-pow-tests, py-lattice-mining-tests]
+    if: always()
+    steps:
+      - run: |
+          result="${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && 'failure' || 'success' }}"
+          echo "Overall result: $result"
+          [ "$result" = 'success' ]

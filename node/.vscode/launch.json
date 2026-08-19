@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Integration Tests",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/integration",
+            "buildFlags": "-tags=rpctest",
+            "env": {
+                "LATTICED_RPC_HOST": "127.0.0.1",
+                "LATTICED_RPC_USER": "user",
+                "LATTICED_RPC_PASS": "pass"
+            }
+        },
+        {
+            "name": "Run RPC Integration Tests",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/integration/rpctest",
+            "buildFlags": "-tags=rpctest",
+            "env": {
+                "LATTICED_RPC_HOST": "127.0.0.1",
+                "LATTICED_RPC_USER": "user",
+                "LATTICED_RPC_PASS": "pass"
+            }
+        }
+    ]
+} 

@@ -1,0 +1,733 @@
+<title>Lattice</title>
+<meta name="description" content="A coin earned by doing real matrix multiplication. Transparent emission, no premine, solo mining that actually works.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap">
+
+<style>
+:root {
+  --ground:    #F2F4F3;
+  --surface:   #FFFFFF;
+  --sunk:      #E7EBEA;
+  --ink:       #10201F;
+  --ink-soft:  #33443F;
+  --muted:     #5A6B69;
+  --line:      #D2DAD8;
+  --accent:    #0F6B62;
+  --accent-dim:#0F6B6215;
+  --copper:    #B4560E;
+  --copper-dim:#B4560E18;
+  --shadow:    0 1px 2px #10201F0A, 0 8px 24px #10201F08;
+
+  --f-display: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --f-body:    "Newsreader", Georgia, serif;
+  --f-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --spine: 34rem;
+  --wide:  70rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:    #0B1413;
+    --surface:   #121D1C;
+    --sunk:      #0A100F;
+    --ink:       #E4EDEB;
+    --ink-soft:  #C2D2CF;
+    --muted:     #8AA09D;
+    --line:      #24322F;
+    --accent:    #3FB8A8;
+    --accent-dim:#3FB8A81F;
+    --copper:    #E08A3C;
+    --copper-dim:#E08A3C1F;
+    --shadow:    0 1px 2px #0006, 0 10px 30px #0004;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:    #0B1413;
+  --surface:   #121D1C;
+  --sunk:      #0A100F;
+  --ink:       #E4EDEB;
+  --ink-soft:  #C2D2CF;
+  --muted:     #8AA09D;
+  --line:      #24322F;
+  --accent:    #3FB8A8;
+  --accent-dim:#3FB8A81F;
+  --copper:    #E08A3C;
+  --copper-dim:#E08A3C1F;
+  --shadow:    0 1px 2px #0006, 0 10px 30px #0004;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  font-weight: 400;
+}
+
+.spine { max-width: var(--spine); margin-inline: auto; padding-inline: 1.5rem; }
+.wide  { max-width: var(--wide);  margin-inline: auto; padding-inline: 1.5rem; }
+
+h1, h2, h3, .ui { font-family: var(--f-display); text-wrap: balance; }
+h1, h2, h3 { line-height: 1.12; letter-spacing: -0.02em; margin: 0; }
+h1 { font-size: clamp(2.6rem, 7vw, 4.25rem); font-weight: 700; }
+h2 { font-size: clamp(1.6rem, 3.4vw, 2.1rem); font-weight: 600; }
+h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; }
+p  { margin: 0 0 1.1em; }
+a  { color: var(--accent); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px;
+}
+
+.eyebrow {
+  font-family: var(--f-display); font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+.lede { font-size: 1.3125rem; line-height: 1.5; color: var(--ink-soft); font-weight: 300; }
+.small { font-size: 0.9375rem; color: var(--muted); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* Lattice points — the section rule. Each dot is a lattice site. */
+.rule {
+  height: 1px; background-image: radial-gradient(circle, var(--line) 1px, transparent 1px);
+  background-size: 12px 12px; background-position: center;
+  margin: 4.5rem auto; max-width: var(--wide);
+}
+
+header.top {
+  border-bottom: 1px solid var(--line); background: var(--ground);
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar { display: flex; align-items: center; gap: 1rem; padding-block: 0.9rem; }
+.brand {
+  font-family: var(--f-display); font-weight: 700; font-size: 1.0625rem;
+  letter-spacing: -0.01em; color: var(--ink); text-decoration: none;
+  display: flex; align-items: center; gap: 0.55rem;
+}
+.brand svg { display: block; }
+.topnav { margin-left: auto; display: flex; gap: 1.4rem; align-items: center; }
+.topnav a {
+  font-family: var(--f-display); font-size: 0.875rem; font-weight: 500;
+  color: var(--muted); text-decoration: none;
+}
+.topnav a:hover { color: var(--ink); }
+@media (max-width: 40rem) { .topnav a.hide-sm { display: none; } }
+
+/* ---- Hero ---- */
+.hero { padding-block: 4.5rem 3rem; }
+.hero h1 { margin-bottom: 1.25rem; }
+.hero .lede { max-width: 32rem; }
+.tick {
+  display: inline-flex; align-items: baseline; gap: 0.5rem;
+  font-family: var(--f-mono); font-size: 0.8125rem; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.3rem 0.8rem; margin-bottom: 1.75rem; background: var(--surface);
+}
+.tick b { color: var(--accent); font-weight: 500; }
+
+/* ---- The signature chart ---- */
+.scope {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 3px; box-shadow: var(--shadow); overflow: hidden;
+}
+.scope-head {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: baseline;
+  padding: 1rem 1.25rem; border-bottom: 1px solid var(--line);
+}
+.scope-head h3 { margin: 0; }
+.scope-legend { margin-left: auto; display: flex; gap: 1.1rem; font-size: 0.75rem; color: var(--muted); font-family: var(--f-display); }
+.scope-legend i { display: inline-block; width: 1.1rem; height: 2px; vertical-align: 0.22em; margin-right: 0.4rem; }
+canvas { display: block; width: 100%; height: auto; }
+.scope-foot {
+  padding: 0.75rem 1.25rem; border-top: 1px solid var(--line);
+  font-size: 0.8125rem; color: var(--muted); background: var(--sunk);
+}
+
+/* ---- Stat instrument panel ---- */
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 3px;
+  box-shadow: var(--shadow);
+}
+.panel-head {
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  padding: 1rem 1.25rem; border-bottom: 1px solid var(--line);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.live { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.status { font-family: var(--f-display); font-size: 0.8125rem; color: var(--muted); }
+.grid-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+.stat { padding: 1.1rem 1.25rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.stat:last-child { border-right: 0; }
+.stat dt {
+  font-family: var(--f-display); font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem;
+}
+.stat dd {
+  margin: 0; font-family: var(--f-mono); font-size: 1.375rem; font-weight: 500;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--ink);
+}
+.stat dd small { font-size: 0.8125rem; color: var(--muted); font-weight: 400; }
+.stat.pending dd { color: var(--muted); }
+
+.countdown { padding: 1.25rem; display: grid; gap: 0.5rem; }
+.countdown .row { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.bar { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width .6s ease; }
+
+/* ---- Prose ---- */
+section { scroll-margin-top: 4.5rem; }
+.prose h2 { margin-bottom: 0.85rem; }
+.prose h3 { margin: 2rem 0 0.5rem; }
+.prose ul { padding-left: 1.15rem; margin: 0 0 1.1em; }
+.prose li { margin-bottom: 0.4em; }
+blockquote {
+  margin: 1.5rem 0; padding: 0.9rem 1.1rem; background: var(--copper-dim);
+  border-left: 2px solid var(--copper); font-size: 1rem;
+}
+blockquote p:last-child { margin: 0; }
+blockquote strong { font-family: var(--f-display); }
+
+pre {
+  margin: 0 0 1.1em; padding: 0.95rem 1.1rem; background: var(--sunk);
+  border: 1px solid var(--line); border-radius: 3px;
+  overflow-x: auto; font-family: var(--f-mono); font-size: 0.8125rem; line-height: 1.7;
+}
+code { font-family: var(--f-mono); font-size: 0.9em; }
+p code, li code, td code { background: var(--sunk); padding: 0.1em 0.35em; border-radius: 2px; }
+.cmt { color: var(--muted); }
+
+.tablewrap { overflow-x: auto; margin: 0 0 1.1em; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+th, td { text-align: left; padding: 0.55rem 0.9rem 0.55rem 0; border-bottom: 1px solid var(--line); }
+th { font-family: var(--f-display); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; padding-right: 0; }
+
+.cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 3px; padding: 1.1rem 1.2rem; }
+.card h3 { margin: 0 0 0.4rem; }
+.card p { margin: 0; font-size: 0.9375rem; color: var(--ink-soft); }
+
+footer {
+  border-top: 1px solid var(--line); margin-top: 5rem; padding-block: 2.5rem 3.5rem;
+  color: var(--muted); font-size: 0.9375rem;
+}
+footer a { color: var(--muted); }
+footer a:hover { color: var(--accent); }
+.footlinks { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1.25rem; font-family: var(--f-display); font-size: 0.875rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+</style>
+
+<header class="top">
+  <div class="wide topbar">
+    <a class="brand" href="#top">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+        <g fill="currentColor">
+          <circle cx="2" cy="2" r="1.6"/><circle cx="9" cy="2" r="1.6"/><circle cx="16" cy="2" r="1.6"/>
+          <circle cx="2" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/><circle cx="16" cy="9" r="1.6"/>
+          <circle cx="2" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/><circle cx="16" cy="16" r="1.6"/>
+        </g>
+      </svg>
+      Lattice
+    </a>
+    <nav class="topnav">
+      <a href="#schedule">Schedule</a>
+      <a href="#mine">Mine</a>
+      <a href="#wallet" class="hide-sm">Wallet</a>
+      <a href="#fair" class="hide-sm">Fair launch</a>
+      <a href="https://github.com/codeminute-the-dev/lattice">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <div class="wide hero">
+    <p class="tick mono">Alpha &middot; no public network yet &middot; <b>v0.1.0</b></p>
+    <h1>A coin you earn by doing real math.</h1>
+    <p class="lede">
+      Most mining burns electricity on guesswork &mdash; hashing random numbers until one
+      happens to fit. Lattice pays for <em>matrix multiplication</em>: the same arithmetic
+      that runs machine learning. The work still secures the chain, but it isn't invented
+      busywork.
+    </p>
+  </div>
+
+  <div class="wide">
+    <div class="scope">
+      <div class="scope-head">
+        <h3>The block reward, forever</h3>
+        <div class="scope-legend">
+          <span><i style="background:var(--accent)"></i>reward per block</span>
+          <span><i style="background:var(--copper)"></i>reset</span>
+        </div>
+      </div>
+      <canvas id="sawtooth" aria-label="Chart of the Lattice block reward over twelve years. The reward starts at 2 LATT and decays gradually to about 1.71 LATT over four years, then resets back to 2 LATT and repeats."></canvas>
+      <div class="scope-foot">
+        Twelve years of mainnet emission, drawn from the same constants the node enforces.
+        The reward slides from 2.000 to 1.715 LATT across four years, then snaps back.
+        <strong>Note the vertical axis starts at 1.6, not 0</strong> &mdash; at true scale the
+        decay would be almost invisible, which is rather the point.
+      </div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <section class="spine prose">
+    <p class="eyebrow">In plain terms</p>
+    <h2>What Lattice actually is</h2>
+    <p>
+      Lattice is a cryptocurrency. Like Bitcoin, nobody runs it: a network of computers
+      keeps a shared ledger, and new coins go to whoever contributes computing power.
+    </p>
+    <p>
+      The difference is what that computing power <em>does</em>. Bitcoin miners compute
+      SHA-256 hashes &mdash; a deliberate lottery, useful to nobody outside the network.
+      Lattice miners multiply matrices, then attach a zero-knowledge proof that they did
+      the multiplication correctly. Anyone can check the proof in milliseconds without
+      redoing the work.
+    </p>
+    <p>
+      Matrix multiplication is the core operation of machine learning. So the hardware that
+      mines Lattice is ordinary GPU and accelerator hardware, and the arithmetic it performs
+      is the same shape as real numerical work.
+    </p>
+    <blockquote>
+      <p>
+        <strong>An honest caveat.</strong> The matrices miners multiply are generated by the
+        protocol, not supplied by customers with problems to solve. Calling it
+        &ldquo;useful work&rdquo; describes the <em>kind</em> of computation, not a claim
+        that someone is getting their homework done. What it buys is a proof-of-work whose
+        hardware and arithmetic sit close to genuinely useful computing, rather than a
+        function designed to be useless on purpose.
+      </p>
+    </blockquote>
+    <p>
+      The consensus machinery is inherited unchanged from
+      <a href="https://github.com/pearl-research-labs/pearl">Pearl</a>, which Lattice forks.
+      What Lattice changes is the economics.
+    </p>
+  </section>
+
+  <div class="rule"></div>
+
+  <section id="schedule" class="wide">
+    <div class="spine prose" style="padding-inline:0">
+      <p class="eyebrow">Tokenomics</p>
+      <h2>The reward resets. On a schedule anyone can check.</h2>
+      <p>
+        Every block pays a reward. It starts at exactly <strong>2 LATT</strong> and decays
+        smoothly &mdash; no halvings, no cliffs. After roughly four years the schedule
+        <em>resets</em>: the reward jumps back to 2 LATT and the curve starts over. This
+        repeats indefinitely.
+      </p>
+    </div>
+
+    <div class="panel" style="margin-top:2rem">
+      <div class="panel-head">
+        <span class="dot" id="conn-dot"></span>
+        <span class="status" id="conn-status">Reading from consensus constants</span>
+        <span class="status" style="margin-left:auto" id="conn-note">No node connected &mdash; live height unavailable</span>
+      </div>
+      <dl class="grid-stats" id="stats">
+        <div class="stat"><dt>Starting reward</dt><dd>2.000000 <small>LATT</small></dd></div>
+        <div class="stat"><dt>Epoch length</dt><dd>3,153,600 <small>blocks</small></dd></div>
+        <div class="stat"><dt>Per epoch</dt><dd>5,840,000 <small>LATT</small></dd></div>
+        <div class="stat"><dt>Block time</dt><dd>40 <small>seconds</small></dd></div>
+        <div class="stat pending"><dt>Block height</dt><dd id="s-height">&mdash;</dd></div>
+        <div class="stat pending"><dt>Current reward</dt><dd id="s-reward">&mdash;</dd></div>
+        <div class="stat pending"><dt>Next reset at</dt><dd id="s-next">&mdash;</dd></div>
+        <div class="stat pending"><dt>Total mined</dt><dd id="s-supply">&mdash;</dd></div>
+      </dl>
+      <div class="countdown">
+        <div class="row">
+          <span class="eyebrow" style="margin:0">Next reset</span>
+          <span class="mono" id="cd-text" style="color:var(--muted)">connect a node to see the countdown</span>
+        </div>
+        <div class="bar"><span id="cd-bar"></span></div>
+      </div>
+    </div>
+
+    <div class="spine prose" style="padding-inline:0; margin-top:2.5rem">
+      <h3>Why reset at all?</h3>
+      <p>
+        A decaying reward eventually approaches zero, and mining stops paying for the
+        security it provides. Bitcoin's answer is to assume transaction fees will replace
+        the subsidy. That might work. It is also an untested bet on an economy that doesn't
+        exist yet.
+      </p>
+      <p>
+        Lattice doesn't take that bet. The curve restarts on a fixed schedule, so miners in
+        year twenty are paid about what miners in year one were paid.
+      </p>
+      <blockquote>
+        <p>
+          <strong>The tradeoff, stated plainly.</strong> This makes Lattice mildly
+          inflationary <em>permanently</em>. There is no maximum supply. If you want a
+          hard-capped asset, Lattice is not it. What it offers instead is that the
+          inflation is completely predictable: every reward at every future height is fixed
+          at launch and computable by anyone, offline, today.
+        </p>
+      </blockquote>
+
+      <h3>What the curve does</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Point in epoch</th><th class="num">Block</th><th class="num">Reward</th></tr></thead>
+          <tbody>
+            <tr><td>First block</td><td class="num">1</td><td class="num">2.000000</td></tr>
+            <tr><td>After a day</td><td class="num">2,160</td><td class="num">1.999781</td></tr>
+            <tr><td>After a month</td><td class="num">65,700</td><td class="num">1.993350</td></tr>
+            <tr><td>After a year</td><td class="num">788,400</td><td class="num">1.922338</td></tr>
+            <tr><td>After two years</td><td class="num">1,576,800</td><td class="num">1.849113</td></tr>
+            <tr><td>Last block of epoch</td><td class="num">3,153,600</td><td class="num">1.714678</td></tr>
+            <tr><td><strong>Reset &mdash; next block</strong></td><td class="num">1</td><td class="num"><strong>2.000000</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Three guarantees</h3>
+      <div class="cards">
+        <div class="card">
+          <h3>Nobody can change it</h3>
+          <p>The constants are compiled into the node. No admin key, no governance vote, no config file. Changing them means shipping a different binary that every operator must choose to run.</p>
+        </div>
+        <div class="card">
+          <h3>Resets never touch your coins</h3>
+          <p>A reset changes the reward of <em>future</em> blocks only. Balances and already-mined supply are untouched. There is no rebasing and no dilution event.</p>
+        </div>
+        <div class="card">
+          <h3>You can compute it yourself</h3>
+          <p>Resets land at block 3,153,601, then 6,307,201, and so on forever. No chain data needed &mdash; just arithmetic on published constants.</p>
+        </div>
+      </div>
+      <p class="small" style="margin-top:1.25rem">
+        Full derivation, including the exact formula and every constant:
+        <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/emission.md">docs/emission.md</a>.
+      </p>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <section id="mine" class="spine prose">
+    <p class="eyebrow">Mining</p>
+    <h2>Solo mining, without a pool</h2>
+    <p>
+      Pools exist because block rewards are lumpy. If blocks are rare and rewards large, a
+      small miner can go months without income even while earning a fair average. Pools
+      smooth that out &mdash; and concentrate block production in a few operators.
+    </p>
+    <p>
+      Lattice attacks the lumpiness instead: <strong>40-second blocks</strong> at
+      <strong>2 LATT each</strong>, about 2,160 blocks a day. Rewards arrive steadily rather
+      than as an annual windfall.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Your share of hashrate</th><th class="num">Blocks/day</th><th class="num">LATT/day</th><th class="num">Typical wait</th></tr></thead>
+        <tbody>
+          <tr><td>10%</td><td class="num">216</td><td class="num">432</td><td class="num">7 min</td></tr>
+          <tr><td>1%</td><td class="num">21.6</td><td class="num">43</td><td class="num">1.1 hr</td></tr>
+          <tr><td>0.1%</td><td class="num">2.2</td><td class="num">4.3</td><td class="num">11 hr</td></tr>
+          <tr><td>0.01%</td><td class="num">0.22</td><td class="num">0.43</td><td class="num">4.6 days</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small">
+      Block finding stays random &mdash; short-run luck varies. Fast blocks just make the
+      runs short. Down to about 0.1% of hashrate, pooling buys you very little.
+    </p>
+
+    <h3>Get started</h3>
+    <p>Build the node and tools:</p>
+<pre><span class="cmt"># needs Go 1.26+, Rust, a C compiler</span>
+git clone https://github.com/codeminute-the-dev/lattice
+cd lattice &amp;&amp; task build:blockchain</pre>
+
+    <p>Create a wallet and take an address:</p>
+<pre>cd bin &amp;&amp; ./latwalletcli   <span class="cmt"># walks you through setup</span></pre>
+
+    <p>Start a node on simnet, mining to your address:</p>
+<pre>./bin/latticed --simnet \
+  --rpcuser=rpcuser --rpcpass=rpcpass \
+  --miningaddr=&lt;your-address&gt; --txindex</pre>
+
+    <p>Mine some blocks and watch the schedule move:</p>
+<pre>./bin/latctl --simnet -u rpcuser -P rpcpass generate 200
+./bin/latctl --simnet -u rpcuser -P rpcpass getnextreset
+
+<span class="cmt"># reward at height 200: 1.71599906 LATT
+# reward at height 201: 2.00000000 LATT   &lt;- reset</span></pre>
+    <p class="small">
+      Simnet uses a 200-block epoch so a full reset takes minutes instead of years.
+      Step-by-step guide:
+      <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/solo-mining.md">docs/solo-mining.md</a>.
+    </p>
+  </section>
+
+  <div class="rule"></div>
+
+  <section id="wallet" class="spine prose">
+    <p class="eyebrow">Wallet</p>
+    <h2>Holding and sending LATT</h2>
+    <p>
+      <code>latwallet</code> is the wallet daemon; <code>latwalletcli</code> is an
+      interactive terminal client that configures it for you. Addresses look like
+      <code class="mono">lat1p4cnr4uwp&hellip;</code> on mainnet and
+      <code class="mono">tlat1&hellip;</code> on testnet.
+    </p>
+<pre><span class="cmt"># create a wallet — record the seed phrase offline</span>
+./bin/latwallet -u rpcuser -P rpcpass --create
+
+<span class="cmt"># start it, then get an address to receive at</span>
+./bin/latwallet -u rpcuser -P rpcpass &amp;
+./bin/latctl -u rpcuser -P rpcpass -s https://localhost:44207 getnewaddress
+
+<span class="cmt"># check your balance / send some LATT</span>
+./bin/latctl -u rpcuser -P rpcpass -s https://localhost:44207 getbalance
+./bin/latctl -u rpcuser -P rpcpass -s https://localhost:44207 sendtoaddress &lt;addr&gt; 1.5</pre>
+    <p>
+      Your seed phrase is the only way to recover the wallet. Write it down on paper. Nobody
+      &mdash; not the maintainers, not a support address &mdash; can restore it for you.
+    </p>
+    <p class="small">
+      Mined coins need 100 confirmations before they can be spent, about 67 minutes.
+      Transaction fees have a near-zero floor; you can pay more for priority, but ordinary
+      transfers cost a rounding error.
+    </p>
+  </section>
+
+  <div class="rule"></div>
+
+  <section id="fair" class="spine prose">
+    <p class="eyebrow">Fair launch</p>
+    <h2>No premine. Verify it yourself.</h2>
+    <p>
+      The genesis block created <strong>zero coins</strong>. Its single output pays 0 to an
+      <code>OP_RETURN</code> script, which is provably unspendable by anyone including
+      whoever wrote it. There is no founder allocation, no developer tax, no treasury, and
+      no pre-mined stash.
+    </p>
+    <p>Every LATT that will ever exist is mined after block zero, by someone doing the work.</p>
+    <p>You don't have to believe any of that. Check it:</p>
+<pre><span class="cmt"># rebuild the genesis blocks from source and diff against what ships</span>
+go run ./node/cmd/gengenesis &gt; /tmp/genesis.go
+diff /tmp/genesis.go node/chaincfg/genesis.go
+
+<span class="cmt"># the consensus tests that enforce it</span>
+go test ./node/chaincfg/  -run TestGenesisHasNoPremine -v
+go test ./node/blockchain/ -run TestGenesisMintsNothing -v</pre>
+    <p>
+      The genesis coinbase also embeds the hash of Bitcoin block #963094. That hash could
+      not have been known before that block was mined, which is evidence the chain wasn't
+      quietly started early and mined in private.
+    </p>
+    <blockquote>
+      <p>
+        <strong>Where the project actually stands.</strong> Lattice is alpha software at
+        version 0.1.0. There is no public network running, the DNS seeds don't resolve, and
+        LATT has no price because there is nowhere to trade it and nothing to trade. Run it
+        on simnet, read the code, tell us what's wrong with it. Please don't treat it as an
+        investment &mdash; there is nothing to invest in yet.
+      </p>
+    </blockquote>
+  </section>
+
+  <div class="rule"></div>
+
+  <section class="spine prose">
+    <p class="eyebrow">Hardware</p>
+    <h2>On ASICs, honestly</h2>
+    <p>
+      Lattice does <strong>not</strong> claim to be ASIC-resistant. That claim is rarely
+      true for long, and the history of &ldquo;ASIC-resistant&rdquo; algorithms is mostly a
+      history of ASICs turning up later while the claim stayed on the website.
+    </p>
+    <p>
+      There's also a reason not to fight too hard: the work function is deliberately shaped
+      so ordinary ML accelerators are good at it. A GPU is already a matrix-multiplication
+      ASIC. The worry isn't specialised hardware existing &mdash; it's mining power
+      concentrating in hardware nobody else can buy.
+    </p>
+    <p>
+      So the mitigation is procedural rather than cryptographic. The work function's shape
+      parameters live in one version-tagged file, so <em>if</em> retuning is ever justified,
+      the change is a small diff a reviewer can read in one sitting instead of a rewrite.
+      Adoption happens by operators upgrading &mdash; there's no key that forces it.
+      <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/anti-asic.md">The full policy</a>
+      spells out what would trigger a proposal and how one would proceed.
+    </p>
+  </section>
+</main>
+
+<footer>
+  <div class="wide">
+    <div class="footlinks">
+      <a href="https://github.com/codeminute-the-dev/lattice">Source code</a>
+      <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/emission.md">Emission</a>
+      <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/solo-mining.md">Mining guide</a>
+      <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/anti-asic.md">ASIC policy</a>
+      <a href="https://github.com/pearl-research-labs/pearl">Pearl (upstream)</a>
+    </div>
+    <p class="small" style="margin:0">
+      Lattice is a fork of Pearl by Pearl Research Labs, itself forked from btcd.
+      ISC licensed; upstream copyright notices preserved throughout the source.
+      Alpha software &mdash; no public network, no token sale, nothing for sale.
+    </p>
+  </div>
+</footer>
+
+<script>
+"use strict";
+
+/* Consensus constants, mirroring node/chaincfg/emission.go (mainnet). */
+const K = 39420000, S_LATT = 78840002, EPOCH = 3153600, BLOCK_SECS = 40;
+
+/* reward(i) = S*k / ((i+k)(i-1+k)), evaluated in LATT. */
+function reward(i) {
+  return (S_LATT * K) / ((i + K) * (i - 1 + K));
+}
+
+/* ---------- the sawtooth ---------- */
+const cv = document.getElementById("sawtooth");
+const ctx = cv.getContext("2d");
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function drawChart() {
+  const wrap = cv.parentElement.getBoundingClientRect();
+  const w = Math.max(320, wrap.width);
+  const h = Math.max(220, Math.min(360, w * 0.34));
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.height = h + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const padL = 46, padR = 14, padT = 16, padB = 26;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+
+  const EPOCHS = 3;                 // 12 years
+  const yMin = 1.6, yMax = 2.05;
+  const x = t => padL + t * plotW;                       // t in [0,1] across all epochs
+  const y = v => padT + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+
+  const line = css("--line"), muted = css("--muted");
+  const accent = css("--accent"), copper = css("--copper");
+
+  /* horizontal gridlines + y labels */
+  ctx.font = '11px "JetBrains Mono", monospace';
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (const v of [1.6, 1.7, 1.8, 1.9, 2.0]) {
+    ctx.strokeStyle = line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, Math.round(y(v)) + .5); ctx.lineTo(w - padR, Math.round(y(v)) + .5); ctx.stroke();
+    ctx.fillStyle = muted; ctx.fillText(v.toFixed(1), padL - 8, y(v));
+  }
+
+  /* reward curve, sampled per pixel column */
+  ctx.strokeStyle = accent; ctx.lineWidth = 2;
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.beginPath();
+  const cols = Math.floor(plotW);
+  for (let c = 0; c <= cols; c++) {
+    const t = c / cols;
+    const block = t * EPOCHS * EPOCH;           // absolute block
+    const i = (block % EPOCH) + 1;              // position within epoch
+    const px = x(t), py = y(reward(i));
+    /* lift the pen at each reset so the snap-back isn't drawn as a slope */
+    if (c === 0 || i < 1 + (EPOCH / cols)) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  /* reset markers */
+  ctx.setLineDash([3, 3]);
+  for (let e = 1; e < EPOCHS; e++) {
+    const t = e / EPOCHS;
+    ctx.strokeStyle = copper; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x(t), padT); ctx.lineTo(x(t), padT + plotH); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  /* x labels, in years */
+  ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = muted;
+  for (let e = 0; e <= EPOCHS; e++) {
+    const t = e / EPOCHS;
+    ctx.fillText((e * 4) + "y", x(t), padT + plotH + 8);
+  }
+  ctx.textAlign = "left";
+  ctx.fillStyle = muted;
+  ctx.fillText("LATT", 6, padT - 4);
+}
+
+drawChart();
+let rAF;
+addEventListener("resize", () => { cancelAnimationFrame(rAF); rAF = requestAnimationFrame(drawChart); });
+if (window.matchMedia) {
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  (mq.addEventListener ? mq.addEventListener.bind(mq, "change") : mq.addListener.bind(mq))(drawChart);
+}
+
+/* ---------- live schedule ---------- */
+/* A small read-only endpoint returning the JSON from `latctl getnextreset`,
+   served same-origin by latstatus behind the tunnel. If it is unreachable the
+   page falls back to the schedule facts that hold regardless of chain state,
+   and says plainly that no node is connected. */
+const STATUS_URL = "/status";
+
+const fmt = new Intl.NumberFormat("en-US");
+const el = id => document.getElementById(id);
+
+function humanDuration(secs) {
+  if (secs < 0) secs = 0;
+  const d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600);
+  const m = Math.floor(secs % 3600 / 60);
+  if (d > 0) return d + "d " + h + "h";
+  if (h > 0) return h + "h " + m + "m";
+  return m + "m " + Math.floor(secs % 60) + "s";
+}
+
+function applyStatus(d) {
+  el("conn-dot").classList.add("live");
+  el("conn-status").textContent = "Live from node";
+  el("conn-note").textContent = "updated " + new Date().toLocaleTimeString();
+
+  el("s-height").textContent = fmt.format(d.height);
+  el("s-reward").innerHTML = Number(d.currentreward).toFixed(6) + ' <small>LATT</small>';
+  el("s-next").textContent = fmt.format(d.nextresetheight);
+  el("s-supply").innerHTML = fmt.format(Math.round(d.totalsupply)) + ' <small>LATT</small>';
+  for (const s of document.querySelectorAll(".stat.pending")) s.classList.remove("pending");
+
+  const left = d.blocksuntilreset;
+  el("cd-text").innerHTML =
+    fmt.format(left) + " blocks &middot; ~" + humanDuration(d.estimatedsecondsuntilreset);
+  el("cd-bar").style.width = (100 * (1 - left / d.epochblocks)).toFixed(2) + "%";
+}
+
+async function poll() {
+  if (!STATUS_URL) return;
+  try {
+    const r = await fetch(STATUS_URL, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    applyStatus(await r.json());
+  } catch (e) {
+    el("conn-status").textContent = "Reading from consensus constants";
+    el("conn-note").textContent = "Node unreachable — showing the fixed schedule only";
+  }
+}
+poll();
+if (STATUS_URL) setInterval(poll, 20000);
+</script>
