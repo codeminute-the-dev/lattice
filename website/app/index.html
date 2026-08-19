@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Wallet — Lattice</title>
+<meta name="description" content="Watch any Lattice address and follow the chain. Read-only: this page never asks for a key, a seed, or a passphrase.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground:#F2F4F3; --surface:#FFFFFF; --sunk:#E7EBEA; --ink:#10201F;
+    --ink-soft:#33443F; --muted:#5A6B69; --line:#D2DAD8; --accent:#0F6B62;
+    --accent-dim:#0F6B6215; --copper:#B4560E; --copper-dim:#B4560E18;
+    --shadow: 0 1px 2px #10201F0A, 0 8px 24px #10201F08;
+    --f-display:"Archivo", ui-sans-serif, system-ui, sans-serif;
+    --f-body:"Newsreader", Georgia, serif;
+    --f-mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --wide:70rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0B1413; --surface:#121D1C; --sunk:#0A100F; --ink:#E4EDEB;
+      --ink-soft:#C2D2CF; --muted:#8AA09D; --line:#24322F; --accent:#3FB8A8;
+      --accent-dim:#3FB8A81F; --copper:#E08A47; --copper-dim:#E08A4722;
+      --shadow: 0 1px 2px #0006, 0 8px 24px #0004;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0B1413; --surface:#121D1C; --sunk:#0A100F; --ink:#E4EDEB;
+    --ink-soft:#C2D2CF; --muted:#8AA09D; --line:#24322F; --accent:#3FB8A8;
+    --accent-dim:#3FB8A81F; --copper:#E08A47; --copper-dim:#E08A4722;
+    --shadow: 0 1px 2px #0006, 0 8px 24px #0004;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--f-body); font-size:17px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a { color:var(--accent); }
+  header.top {
+    border-bottom:1px solid var(--line); background:var(--surface);
+    position:sticky; top:0; z-index:5;
+  }
+  .bar {
+    max-width:var(--wide); margin:0 auto; padding:14px 22px;
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  }
+  .brand { font-family:var(--f-display); font-weight:700; letter-spacing:-.02em; font-size:19px; text-decoration:none; color:var(--ink); }
+  .brand span { color:var(--accent); }
+  nav { margin-left:auto; display:flex; gap:16px; font-family:var(--f-display); font-size:14px; font-weight:500; }
+  nav a { text-decoration:none; color:var(--muted); }
+  nav a:hover { color:var(--accent); }
+  main { max-width:var(--wide); margin:0 auto; padding:30px 22px 60px; }
+  h1 { font-family:var(--f-display); font-size:clamp(28px,4vw,40px); letter-spacing:-.025em; margin:0 0 8px; font-weight:700; }
+  .lede { color:var(--muted); margin:0 0 28px; font-size:18px; max-width:46rem; }
+  .banner {
+    display:flex; gap:12px; align-items:flex-start; background:var(--accent-dim);
+    border:1px solid var(--accent); border-radius:10px; padding:14px 16px;
+    margin:0 0 28px; font-size:15px; color:var(--ink-soft);
+  }
+  .banner strong { color:var(--ink); font-family:var(--f-display); }
+  .banner .ico { font-size:20px; line-height:1.2; }
+  .cards { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); margin-bottom:26px; }
+  .card {
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; box-shadow:var(--shadow);
+  }
+  .card .k { font-family:var(--f-display); font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); font-weight:600; }
+  .card .v { font-family:var(--f-mono); font-size:24px; margin-top:6px; letter-spacing:-.02em; word-break:break-all; }
+  .card .v.sm { font-size:15px; }
+  .card .n { font-size:13px; color:var(--muted); margin-top:3px; }
+  section.panel {
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:20px 22px; box-shadow:var(--shadow); margin-bottom:22px;
+  }
+  section.panel > h2 {
+    font-family:var(--f-display); font-size:12px; text-transform:uppercase;
+    letter-spacing:.09em; color:var(--muted); margin:0 0 14px; font-weight:600;
+  }
+  .searchrow { display:flex; gap:10px; flex-wrap:wrap; }
+  input, button {
+    font-family:var(--f-mono); font-size:14px; padding:11px 13px;
+    border:1px solid var(--line); border-radius:9px; background:var(--ground); color:var(--ink);
+  }
+  input { flex:1 1 320px; min-width:0; }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button {
+    font-family:var(--f-display); font-weight:600; cursor:pointer;
+    background:var(--accent); color:#fff; border-color:var(--accent); padding-inline:20px;
+  }
+  button:hover { filter:brightness(1.08); }
+  button.ghost { background:var(--ground); color:var(--ink); border-color:var(--line); }
+  button:disabled { opacity:.55; cursor:not-allowed; }
+  .hint { font-size:13px; color:var(--muted); margin-top:9px; }
+  .err { color:var(--copper); background:var(--copper-dim); border:1px solid var(--copper);
+         border-radius:9px; padding:10px 13px; margin-top:12px; font-size:14px; display:none; }
+  .err.show { display:block; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-family:var(--f-display); font-size:11px; text-transform:uppercase;
+       letter-spacing:.06em; color:var(--muted); font-weight:600; padding:0 10px 9px 0; }
+  td { padding:9px 10px 9px 0; border-top:1px solid var(--line); vertical-align:top; font-family:var(--f-mono); font-size:13px; }
+  td.num { text-align:right; white-space:nowrap; }
+  .pos { color:var(--accent); } .imm { color:var(--copper); }
+  .mono-break { word-break:break-all; }
+  .empty { color:var(--muted); font-size:14px; padding:12px 0; }
+  details.raw { margin-top:14px; }
+  details.raw summary { cursor:pointer; font-family:var(--f-display); font-size:13px; color:var(--muted); }
+  pre { background:var(--sunk); border:1px solid var(--line); border-radius:9px; padding:13px;
+        overflow-x:auto; font-family:var(--f-mono); font-size:12px; line-height:1.5; }
+  footer { border-top:1px solid var(--line); margin-top:40px; padding:24px 22px 50px; }
+  .foot { max-width:var(--wide); margin:0 auto; color:var(--muted); font-size:14px; }
+  .spin { display:inline-block; width:13px; height:13px; border:2px solid var(--line);
+          border-top-color:var(--accent); border-radius:50%; animation:s .7s linear infinite; vertical-align:-2px; }
+  @keyframes s { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="bar">
+    <a class="brand" href="/">latt<span>ice</span></a>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/#mine">Mine</a>
+      <a href="/#schedule">Emission</a>
+      <a href="https://github.com/codeminute-the-dev/lattice">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <h1>Wallet</h1>
+  <p class="lede">
+    Look up any Lattice address and follow the chain as it moves. Everything here reads
+    public chain data and nothing else.
+  </p>
+
+  <div class="banner">
+    <span class="ico" aria-hidden="true">🔑</span>
+    <div>
+      <strong>This page cannot spend your coins, and it never asks for anything that could.</strong><br>
+      No seed, no private key, no passphrase — there is no field here that accepts one, and
+      the API behind this page has no method that moves funds. Spending happens in
+      <code>latwalletgui</code> on your own machine, where a compromised web server cannot
+      reach it. Any site that asks for your Lattice seed phrase is stealing from you.
+    </div>
+  </div>
+
+  <div class="cards" id="chaincards">
+    <div class="card"><div class="k">Height</div><div class="v" id="c-height"><span class="spin"></span></div><div class="n" id="c-peers">&nbsp;</div></div>
+    <div class="card"><div class="k">Block reward</div><div class="v" id="c-reward">—</div><div class="n">falls each block until reset</div></div>
+    <div class="card"><div class="k">Minted this epoch</div><div class="v" id="c-minted">—</div><div class="n" id="c-thresh">&nbsp;</div></div>
+    <div class="card"><div class="k">Difficulty</div><div class="v" id="c-diff">—</div><div class="n" id="c-best">&nbsp;</div></div>
+  </div>
+
+  <section class="panel">
+    <h2>Look up an address</h2>
+    <form class="searchrow" id="addr-form" autocomplete="off">
+      <input id="addr-in" placeholder="lat1…" spellcheck="false" aria-label="Lattice address">
+      <button type="submit" id="addr-btn">Look up</button>
+    </form>
+    <div class="hint">Read-only. Pasting an address here reveals nothing secret — an address is meant to be public.</div>
+    <div class="err" id="addr-err"></div>
+
+    <div id="addr-result" hidden>
+      <div class="cards" style="margin-top:20px">
+        <div class="card"><div class="k">Spendable</div><div class="v" id="a-bal">—</div><div class="n">LATT</div></div>
+        <div class="card"><div class="k">Maturing</div><div class="v" id="a-imm">—</div><div class="n">mined, under 100 confirmations</div></div>
+        <div class="card"><div class="k">Transactions</div><div class="v" id="a-count">—</div><div class="n">most recent 200</div></div>
+      </div>
+      <table>
+        <thead><tr><th>When</th><th>Txid</th><th class="num">Received</th><th class="num">Conf</th></tr></thead>
+        <tbody id="a-txs"></tbody>
+      </table>
+      <div class="empty" id="a-empty" hidden>Nothing on this address yet.</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Look up a block or transaction</h2>
+    <form class="searchrow" id="ex-form" autocomplete="off">
+      <input id="ex-in" placeholder="block height, block hash, or txid" spellcheck="false" aria-label="Block or transaction">
+      <button type="submit" class="ghost">Look up</button>
+    </form>
+    <div class="err" id="ex-err"></div>
+    <div id="ex-result" hidden>
+      <div class="cards" style="margin-top:20px" id="ex-cards"></div>
+      <details class="raw"><summary>Raw JSON</summary><pre id="ex-raw"></pre></details>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Spending: run the wallet locally</h2>
+    <p style="margin-top:0;color:var(--ink-soft)">
+      To send LATT you run <code>latwalletgui</code> on your own machine. It serves the same
+      kind of interface at <code>127.0.0.1:8090</code>, talks to your own node, and keeps the
+      keys where a website can never reach them.
+    </p>
+      <pre>task build:latwalletgui
+./bin/latwalletgui -conf ~/.latticed/latticed.conf</pre>
+    <div class="hint">It prints a URL with a one-time token. Open that and you have the full wallet.</div>
+  </section>
+</main>
+
+<footer><div class="foot">
+  Lattice reads this page from a read-only node API. No account, no cookie, no tracking.
+  <a href="https://github.com/codeminute-the-dev/lattice">Source</a>
+</div></footer>
+
+<script>
+// Same-origin by default: site ingress proxies /api/* to latstatus. Point
+// API_BASE at another host only if the shim runs somewhere else.
+const API_BASE = "/api";
+
+const $ = (id) => document.getElementById(id);
+const fmt8 = (n) => Number(n).toLocaleString(undefined, {minimumFractionDigits:8, maximumFractionDigits:8});
+const fmt2 = (n) => Number(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+
+async function api(path) {
+  const r = await fetch(API_BASE + path, { cache: "no-store" });
+  const j = await r.json().catch(() => ({ error: "unreadable reply" }));
+  if (!r.ok || j.error) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+
+function showErr(id, msg) {
+  const el = $(id);
+  el.textContent = msg;
+  el.classList.add("show");
+}
+function clearErr(id) { $(id).classList.remove("show"); }
+
+async function loadChain() {
+  try {
+    const c = await api("/chain");
+    $("c-height").textContent = Number(c.height).toLocaleString();
+    $("c-peers").textContent = (c.peers ?? 0) + " peer" + (c.peers === 1 ? "" : "s");
+    $("c-diff").textContent = Number(c.difficulty ?? 0).toFixed(6);
+    if (c.bestblock) {
+      $("c-best").textContent = String(c.bestblock).slice(0, 16) + "…";
+    }
+    const e = c.emission;
+    if (e) {
+      $("c-reward").textContent = fmt8(e.currentreward);
+      $("c-minted").textContent = fmt2(e.mintedthisepoch);
+      $("c-thresh").textContent = Number(e.blocksuntilreset).toLocaleString() + " blocks until reset";
+    }
+  } catch (err) {
+    $("c-height").textContent = "—";
+    $("c-peers").textContent = "node unreachable";
+  }
+}
+
+$("addr-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  clearErr("addr-err");
+  const a = $("addr-in").value.trim();
+  if (!a) return;
+  $("addr-btn").disabled = true;
+  try {
+    const d = await api("/address?a=" + encodeURIComponent(a));
+    $("a-bal").textContent = fmt8(d.balance);
+    $("a-imm").textContent = fmt8(d.immature);
+    $("a-count").textContent = Number(d.txcount).toLocaleString();
+    const body = $("a-txs");
+    body.textContent = "";
+    const txs = (d.transactions || []).slice().reverse();
+    $("a-empty").hidden = txs.length > 0;
+    for (const t of txs) {
+      const tr = document.createElement("tr");
+      const cells = [
+        [t.time ? new Date(t.time * 1000).toLocaleString() : "pending", ""],
+        [t.txid, "mono-break"],
+        [fmt8(t.received), "num " + (t.coinbase && t.confirmations < 100 ? "imm" : "pos")],
+        [Number(t.confirmations).toLocaleString(), "num"]
+      ];
+      for (const [text, cls] of cells) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        if (cls) td.className = cls;
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+    $("addr-result").hidden = false;
+  } catch (err) {
+    $("addr-result").hidden = true;
+    showErr("addr-err", err.message);
+  } finally {
+    $("addr-btn").disabled = false;
+  }
+});
+
+$("ex-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  clearErr("ex-err");
+  const q = $("ex-in").value.trim();
+  if (!q) return;
+  const isHash = /^[0-9a-f]{64}$/.test(q);
+  const isHeight = /^[0-9]{1,9}$/.test(q);
+  if (!isHash && !isHeight) {
+    showErr("ex-err", "Enter a block height, a block hash, or a transaction id.");
+    return;
+  }
+  try {
+    let d, cards;
+    if (isHeight) {
+      d = await api("/block?id=" + q);
+      cards = blockCards(d);
+    } else {
+      // A 64-hex string is either a block hash or a txid; try block, then tx.
+      try { d = await api("/block?id=" + q); cards = blockCards(d); }
+      catch (e) { d = await api("/tx?id=" + q); cards = txCards(d); }
+    }
+    const wrap = $("ex-cards");
+    wrap.textContent = "";
+    for (const [k, v, small] of cards) {
+      const div = document.createElement("div");
+      div.className = "card";
+      const kd = document.createElement("div"); kd.className = "k"; kd.textContent = k;
+      const vd = document.createElement("div"); vd.className = "v" + (small ? " sm" : ""); vd.textContent = v;
+      div.append(kd, vd);
+      wrap.appendChild(div);
+    }
+    $("ex-raw").textContent = JSON.stringify(d, null, 2);
+    $("ex-result").hidden = false;
+  } catch (err) {
+    $("ex-result").hidden = true;
+    showErr("ex-err", err.message);
+  }
+});
+
+function blockCards(b) {
+  return [
+    ["Block height", Number(b.height).toLocaleString(), false],
+    ["Time", new Date(b.time * 1000).toLocaleString(), true],
+    ["Transactions", String((b.tx || []).length), false],
+    ["Confirmations", Number(b.confirmations).toLocaleString(), false],
+    ["Size", Number(b.size).toLocaleString() + " bytes", true],
+    ["Hash", b.hash, true]
+  ];
+}
+function txCards(t) {
+  const out = (t.vout || []).reduce((s, o) => s + Number(o.value || 0), 0);
+  return [
+    ["Total out", fmt8(out) + " LATT", true],
+    ["Confirmations", Number(t.confirmations || 0).toLocaleString(), false],
+    ["Time", t.time ? new Date(t.time * 1000).toLocaleString() : "pending", true],
+    ["Txid", t.txid, true]
+  ];
+}
+
+// Deep link: /app/?a=<address> looks the address up on load.
+const params = new URLSearchParams(location.search);
+if (params.get("a")) {
+  $("addr-in").value = params.get("a");
+  $("addr-form").dispatchEvent(new Event("submit"));
+}
+
+loadChain();
+setInterval(loadChain, 12000);
+</script>
+</body>
+</html>

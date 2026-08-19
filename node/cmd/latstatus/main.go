@@ -1,17 +1,23 @@
-// Command latstatus exposes a latticed node's emission schedule as a small
-// read-only JSON endpoint, so a static site can render a live countdown.
+// Command latstatus exposes a latticed node's public chain data as a small
+// read-only JSON API, so a static site can render a live countdown, a chain
+// dashboard, and the website's watch-only wallet app.
 //
 // It exists because a browser cannot call latticed's JSON-RPC directly: that
 // interface uses HTTP basic auth over TLS and sends no CORS headers, and putting
 // node RPC credentials in a web page would be a poor idea regardless. This shim
-// holds the credentials server-side and re-publishes exactly one method,
-// getnextreset, with no parameters and no way to reach anything else.
+// holds the credentials server-side and re-publishes a closed set of read-only
+// methods, with validated parameters and no way to reach anything else.
+//
+// Every method behind it is read-only by construction. There is deliberately no
+// endpoint that can move coins and no path from here to a wallet: signing lives
+// in latwalletgui on the user's own machine, so compromising this server cannot
+// cost anyone their funds.
 //
 // Usage:
 //
 //	latstatus -node http://127.0.0.1:44107 -user rpcuser -pass rpcpass -listen :8080
 //
-// Then point the website's STATUS_URL at http://your-host:8080/status.
+// Then point the website's API_BASE at http://your-host:8080.
 package main
 
 import (
@@ -154,7 +160,10 @@ func main() {
 	client := &http.Client{Timeout: 10 * time.Second}
 	c := &cached{}
 
-	http.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	registerAPI(mux, client)
+
+	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", *origin)
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "application/json")
@@ -177,9 +186,11 @@ func main() {
 		w.Write(body)
 	})
 
-	log.Printf("latstatus serving %s/status from node %s", *listen, *nodeURL)
+	log.Printf("latstatus serving %s from node %s", *listen, *nodeURL)
+	log.Printf("endpoints: /status /api/chain /api/address?a= /api/tx?id= /api/block?id=")
 	srv := &http.Server{
 		Addr:              *listen,
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Fatal(srv.ListenAndServe())

@@ -41,10 +41,24 @@ over TLS and sends no CORS headers, and putting node credentials in a web page
 would be a bad idea anyway.
 
 `latstatus` bridges the gap. It holds the credentials server-side and
-re-publishes exactly one method, `getnextreset`, read-only:
+re-publishes a closed set of read-only methods:
+
+| Endpoint | What it answers |
+| --- | --- |
+| `/status` | `getnextreset` — the emission countdown the front page renders |
+| `/api/chain` | height, difficulty, best block, peers, emission |
+| `/api/address?a=` | balance, maturing balance, recent transactions |
+| `/api/tx?id=` | one transaction |
+| `/api/block?id=` | one block, by hash or height |
+
+Every one is read-only by construction. There is no endpoint that moves coins
+and no path from the shim to a wallet, which is what makes it safe to expose:
+compromising the web server cannot cost anyone their funds. `/api/address`
+needs the node running with `addrindex=1`.
 
 ```bash
 go build -o bin/latstatus ./node/cmd/latstatus
+
 
 ./bin/latstatus \
   -node http://127.0.0.1:44107 \
@@ -59,16 +73,35 @@ Then set `STATUS_URL` near the bottom of `index.html`:
 const STATUS_URL = "https://lattice.codeminute.dev/status";
 ```
 
-Proxy `/status` to the shim so the page and the endpoint share an origin:
+Proxy `/status` and `/api/*` to the shim so the pages and the endpoints share an
+origin:
 
 ```
 lattice.codeminute.dev {
     root * /srv/lattice/website
     file_server
-    handle /status { reverse_proxy 127.0.0.1:8099 }
+    handle /status  { reverse_proxy 127.0.0.1:8099 }
+    handle /api/*   { reverse_proxy 127.0.0.1:8099 }
     encode gzip
 }
 ```
+
+## The wallet app
+
+`website/app/index.html` is the watch-only wallet at `/app/`. It looks up any
+address, follows the chain, and explores blocks and transactions — all from the
+read-only API above.
+
+It deliberately cannot spend. There is no field on that page that accepts a
+seed, a key, or a passphrase, and the API behind it has no method that could use
+one. This is not a limitation to be fixed later: a page served from a public
+website is exactly the wrong place to type a passphrase, because whoever
+compromises the site (a bad deploy, a hijacked DNS record, a stolen Cloudflare
+session) then serves JavaScript that captures it. Spending lives in
+`latwalletgui`, which runs on the user's own machine and is unreachable from
+here.
+
+`/app/?a=<address>` deep-links straight to a lookup.
 
 The shim caches node responses for 5 seconds (`-cache`) and serves the last good
 response if the node briefly goes away, so polling every 20 seconds costs the
