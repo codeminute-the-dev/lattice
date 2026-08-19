@@ -41,6 +41,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/codeminute-the-dev/lattice/wallet/internal/walletui"
 )
 
 var (
@@ -259,7 +261,7 @@ func main() {
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		// The token is templated into the page so a same-origin load is
 		// authenticated while a cross-origin one cannot read it.
-		w.Write([]byte(strings.Replace(indexHTML, "__TOKEN__", token, 1)))
+		w.Write([]byte(strings.Replace(walletui.IndexHTML, "__TOKEN__", token, 1)))
 	})
 
 	uiURL := fmt.Sprintf("http://%s/?t=%s", *listen, token)
