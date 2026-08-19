@@ -5,7 +5,7 @@ What is currently live at `lattice.codeminute.dev` runs as four processes:
 | Process | Port | Role |
 |---|---|---|
 | `latticed` | 44107 (RPC), 44108 (P2P) | The mainnet full node |
-| `latstatus` | 8099 | Re-publishes `getnextreset` read-only, for the website |
+| `latstatus` | 8099 | Read-only chain API for the website and its wallet app |
 | `latsite` | 8081 | Serves `website/` as static files |
 | `cloudflared` | — | Tunnel for `lattice.codeminute.dev` |
 
@@ -35,7 +35,7 @@ password and should stay mode `600`. `latstatus` reads the same file via
 
 RPC is bound to `127.0.0.1` with TLS disabled. That is deliberate and safe here:
 nothing off-machine can reach the port, and the only thing exposed publicly is
-`latstatus`, which accepts no parameters and can call exactly one read-only
+`latstatus`, which validates every parameter and can call only read-only
 method.
 
 ## The tunnel
@@ -45,8 +45,8 @@ method.
 `~/.cloudflared/lattice.yml`. It is deliberately separate from the `wormt`
 tunnel in `/etc/cloudflared`, so restarting one never interrupts the other.
 
-Ingress routes `/status` to `latstatus` and everything else to `latsite`, both
-on loopback.
+Ingress routes `/status` and `/api/*` to `latstatus` and everything else to
+`latsite`, both on loopback.
 
 ## Updating the site
 
