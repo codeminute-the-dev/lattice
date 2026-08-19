@@ -2,7 +2,7 @@ name: Blockchain / Build & Publish
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

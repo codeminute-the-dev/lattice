@@ -7,7 +7,7 @@ on:
       - '.github/workflows/plonky2_ci.yml'
   push:
     branches:
-      - master
+      - main
       - main
     paths:
       - 'plonky2/**'
