@@ -1,5 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lattice</title>
 <meta name="description" content="A coin earned by doing real matrix multiplication. Transparent emission, no premine, solo mining that actually works.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F2F4F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B1413" media="(prefers-color-scheme: dark)">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lattice">
+<meta property="og:title" content="Lattice — a coin you earn by doing real math">
+<meta property="og:description" content="Mining is a by-product of matrix multiplication. The block reward starts at 2 LATT, decays gently, and resets every four years on a schedule anyone can compute. No premine.">
+<meta property="og:url" content="https://lattice.codeminute.dev/">
+<meta name="twitter:card" content="summary">
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://lattice.codeminute.dev/">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap">
@@ -223,11 +241,33 @@ footer a { color: var(--muted); }
 footer a:hover { color: var(--accent); }
 .footlinks { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1.25rem; font-family: var(--f-display); font-size: 0.875rem; }
 
+/* Small screens: tighten the vertical rhythm and let the instrument panels
+   breathe rather than crowding against the viewport edge. */
+@media (max-width: 34rem) {
+  body { font-size: 1rem; }
+  .spine, .wide { padding-inline: 1.15rem; }
+  .hero { padding-block: 2.75rem 2rem; }
+  .lede { font-size: 1.1875rem; }
+  .rule { margin: 3rem auto; }
+  .scope-head { gap: 0.35rem; }
+  .scope-legend { margin-left: 0; width: 100%; gap: 0.9rem; }
+  .stat { padding: 0.9rem 1.1rem; }
+  .stat dd { font-size: 1.25rem; }
+  .panel-head { gap: 0.5rem; }
+  .panel-head .status { font-size: 0.75rem; }
+  /* The auto-fit grid wraps here, so a per-cell right border leaves ragged
+     stubs at the wrap points. */
+  .stat { border-right: 0; }
+  pre { font-size: 0.75rem; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 </style>
+</head>
 
+<body>
 <header class="top">
   <div class="wide topbar">
     <a class="brand" href="#top">
@@ -733,3 +773,5 @@ async function poll() {
 poll();
 if (STATUS_URL) setInterval(poll, 20000);
 </script>
+</body>
+</html>

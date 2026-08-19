@@ -1,7 +1,13 @@
 # lattice.codeminute.dev
 
-The public site. One self-contained `index.html` — no build step, no bundler, no
-dependencies. Fonts come from Google Fonts; everything else is inline.
+The public site. A self-contained `index.html` — no build step, no bundler, no
+dependencies — plus `favicon.svg`, `robots.txt`, and `sitemap.xml`. Fonts come
+from Google Fonts; everything else is inline.
+
+`index.html` is a complete HTML document (doctype, `<head>`, viewport, and the
+rest). That matters: it is served raw by `latsite`, with nothing wrapping it, so
+omitting the viewport meta would leave the page rendering at desktop width on
+phones.
 
 ## Deploying
 
