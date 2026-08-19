@@ -1,0 +1,21 @@
+[Unit]
+Description=Lattice peer node (gives the miner someone to relay to)
+Documentation=https://github.com/codeminute-the-dev/lattice
+After=latticed.service
+Wants=latticed.service
+
+[Service]
+Type=simple
+# The CPU miner in latticed refuses to run while ConnectedCount() == 0, because
+# a block it cannot relay is a block it cannot get paid for. There is no public
+# Lattice network yet and the DNS seeds do not resolve, so this second node
+# exists purely to be that peer. It does not mine and keeps its own datadir.
+ExecStart=%h/Desktop/lattice/bin/latticed \
+  --configfile=%h/.latticed-peer/latticed.conf \
+  --datadir=%h/.latticed-peer/data \
+  --logdir=%h/.latticed-peer/logs
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
