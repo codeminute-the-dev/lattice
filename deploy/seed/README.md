@@ -17,17 +17,31 @@ mining node at home, dials out to it.
 ## Picking a box
 
 The build is the constraint, not the running node. `latticed` idles at around
-150 MB, but the verifier circuit caches are not committed to git, so a fresh
-install generates them — a plonky2 recursion build that wants several GB.
+150 MB. The verifier circuit caches are not committed to git, so a fresh install
+generates them, and that plonky2 recursion build is the memory ceiling:
+
+| | Measured on 12 cores |
+| --- | --- |
+| Wall clock | 1:40 |
+| CPU time | 6:34 (so it parallelises well) |
+| Peak RSS | **1.18 GB** |
+
+A slower box therefore costs mostly time, not memory.
 
 | Shape | Verdict |
 | --- | --- |
-| Oracle Ampere A1 (ARM, up to 4 OCPU / 24 GB, always free) | **Use this.** Comfortable for the build |
-| Oracle VM.Standard.E2.1.Micro (x86, 1 OCPU / 1 GB, always free) | Runs the node fine, but will be OOM-killed generating the caches. Build elsewhere and copy `bin/latticed`, `zk-pow/src/circuit/v2_cache.bin` and `zk-pow/src/v1/v1_cache.bin` |
+| Oracle Ampere A1 (ARM, up to 4 OCPU / 24 GB, always free) | **Use this.** Nothing to think about |
+| Oracle VM.Standard.E2.1.Micro (x86, 1 OCPU / 1 GB, always free) | Workable, but 1.18 GB does not fit in 1 GB. Add a 2 GB swapfile first, and expect the cache build to take several minutes on one core |
 | Hetzner CX22 (~€4/mo, 2 vCPU / 4 GB) | Fine, and no capacity roulette |
 
 Ampere capacity in popular Oracle regions is frequently exhausted. If the
 console refuses, try a different availability domain or region.
+
+The cache build is reproducible: the same source produces byte-identical files,
+verified across two independent builds. So on a tiny box you can equally build
+them elsewhere and copy `zk-pow/src/circuit/v2_cache.bin` and
+`zk-pow/src/v1/v1_cache.bin` over — as long as you compare hashes, that is
+exactly as trustworthy as building in place.
 
 ## Install
 

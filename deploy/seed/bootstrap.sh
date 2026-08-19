@@ -37,19 +37,27 @@ RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
 say "Architecture $ARCH (Go: $GOARCH), RAM ${RAM_MB} MB"
 
 # The verifier circuit caches are not in git, so a fresh clone has to generate
-# them. That is a plonky2 recursion build and it is the memory high-water mark
-# of the whole install — far more than compiling either toolchain.
-if [ "$RAM_MB" -lt 3500 ]; then
+# them. Measured on a fast multi-core box: 1:40 wall clock and 1.18 GB peak
+# RSS. The build is highly parallel, so a slower box costs mostly time rather
+# than memory — but 1.18 GB does not fit in a 1 GB instance without swap.
+if [ "$RAM_MB" -lt 1600 ]; then
   cat >&2 <<WARN
 
   This box has ${RAM_MB} MB of RAM. Generating the verifier circuit caches
-  needs several GB and will most likely be OOM-killed here.
+  peaks around 1.2 GB, so it will likely be OOM-killed here.
 
-  Two ways through:
-    - Use an Ampere (ARM) shape instead. Oracle's always-free ARM tier gives
-      4 OCPU / 24 GB, which is comfortable.
-    - Or build elsewhere and copy over: bin/latticed plus
-      zk-pow/src/circuit/v2_cache.bin and zk-pow/src/v1/v1_cache.bin
+  Three ways through, cheapest first:
+    - Add swap, which is enough on a 1 GB instance:
+        fallocate -l 2G /swapfile && chmod 600 /swapfile
+        mkswap /swapfile && swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    - Use an Ampere (ARM) shape: Oracle's always-free tier gives 4 OCPU
+      and 24 GB, with room to spare.
+    - Build the caches elsewhere and copy them over. They are reproducible —
+      the same source produces byte-identical files — so copying is exactly
+      as trustworthy as building, provided you check the hashes:
+        zk-pow/src/circuit/v2_cache.bin
+        zk-pow/src/v1/v1_cache.bin
 
   Continuing anyway in 15s; Ctrl-C to stop.
 
@@ -100,7 +108,7 @@ fi
 
 # ---------------------------------------------------------------- build
 cd "$SRC"
-say "Building the verifier circuit caches (slowest step, several minutes)"
+say "Building the verifier circuit caches (~2 min on 4+ cores, ~1.2 GB peak)"
 if [ ! -s zk-pow/src/circuit/v2_cache.bin ] || [ ! -s zk-pow/src/v1/v1_cache.bin ]; then
   ( cd zk-pow && cargo run --release --no-default-features --bin build_cache \
       src/circuit/v2_cache.bin src/v1/v1_cache.bin )
