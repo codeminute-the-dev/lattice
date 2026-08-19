@@ -164,6 +164,9 @@ pub enum CertificateVersion {
     ZkMoe = 2,
     /// V3: same wire layout as V2, salted noise-seed derivation.
     ZkV3 = 3,
+    /// V4: same wire layout as V3, salted under Lattice's own seed domain
+    /// instead of the inherited Pearl one.
+    ZkV4 = 4,
 }
 
 impl CertificateVersion {
@@ -173,6 +176,7 @@ impl CertificateVersion {
         match self {
             Self::ZkDense | Self::ZkMoe => SeedDerivation::Legacy,
             Self::ZkV3 => SeedDerivation::Salted,
+            Self::ZkV4 => SeedDerivation::SaltedLattice,
         }
     }
 }
@@ -185,6 +189,7 @@ impl TryFrom<u32> for CertificateVersion {
             v if v == Self::ZkDense as u32 => Ok(Self::ZkDense),
             v if v == Self::ZkMoe as u32 => Ok(Self::ZkMoe),
             v if v == Self::ZkV3 as u32 => Ok(Self::ZkV3),
+            v if v == Self::ZkV4 as u32 => Ok(Self::ZkV4),
             v => bail!("unknown certificate version: {v}"),
         }
     }
@@ -741,11 +746,12 @@ mod tests {
         assert_eq!(CertificateVersion::ZkDense.seed_derivation(), SeedDerivation::Legacy);
         assert_eq!(CertificateVersion::ZkMoe.seed_derivation(), SeedDerivation::Legacy);
         assert_eq!(CertificateVersion::ZkV3.seed_derivation(), SeedDerivation::Salted);
+        assert_eq!(CertificateVersion::ZkV4.seed_derivation(), SeedDerivation::SaltedLattice);
     }
 
     #[test]
     fn unknown_cert_versions_rejected() {
-        for version in [0u32, 4, u32::MAX] {
+        for version in [0u32, 5, u32::MAX] {
             assert!(check_cert_version_eligible(version, &dense_proof()).is_err());
         }
     }

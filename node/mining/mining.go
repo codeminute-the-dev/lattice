@@ -657,6 +657,10 @@ mempoolLoop:
 	// requires at this height, otherwise CheckConnectBlockTemplate rejects it.
 	var certificate wire.BlockCertificate
 	switch g.chainParams.RequiredCertVersion(nextBlockHeight) {
+	case wire.CertificateVersionV4:
+		certificate = &wire.CertificateV4{CertificateV3: wire.CertificateV3{
+			CertificateV2: wire.CertificateV2{Hash: msgBlock.BlockHash()},
+		}}
 	case wire.CertificateVersionV3:
 		certificate = &wire.CertificateV3{CertificateV2: wire.CertificateV2{Hash: msgBlock.BlockHash()}}
 	case wire.CertificateVersionV2:

@@ -476,7 +476,8 @@ func CheckBlockSanity(block *btcutil.Block, chainParams *chaincfg.Params, timeSo
 //   - Before MoEForkHeight (or with the fork disabled): only V1 accepted
 //   - At and after MoEForkHeight (hardfork): only V2 accepted
 //   - At and after SaltedSeedForkHeight (hardfork): only V3 accepted
-//   - At and after DenseOnlyForkHeight (softfork): V2/V3 certificates must
+//   - At and after LatticeSeedForkHeight (hardfork): only V4 accepted
+//   - At and after DenseOnlyForkHeight (softfork): V2/V3/V4 certificates must
 //     carry a dense (non-MoE) proof
 //   - At and after RankPenaltyForkHeight (softfork): the proof's noise rank
 //     must meet a minimum and its jackpot must meet a difficulty bound scaled

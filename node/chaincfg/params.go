@@ -291,6 +291,28 @@ type Params struct {
 	// Must not activate before MoEForkHeight: V3 supersedes V2.
 	SaltedSeedForkHeight int32
 
+	// LatticeSeedForkHeight is the block height at which Lattice leaves the
+	// proof-of-work domain it shares with Pearl: at and after it blocks must
+	// carry a V4 certificate (wire.CertificateVersionV4), whose Merkle roots
+	// are salted under Lattice's own constants rather than the ones inherited
+	// from Pearl. A value of 0 disables the fork.
+	//
+	// Lattice's V3 work function is bit-identical to Pearl's on purpose. The
+	// reference miner needs H100-class hardware and no independent Lattice
+	// miner exists, so the only consumer-GPU mining available to this chain
+	// today comes from third-party miners that implement Pearl's algorithm.
+	// Sharing the domain is what lets those miners produce valid Lattice
+	// blocks; the cost is that Pearl's hashrate can be pointed at this chain
+	// at will, which a chain this size cannot outweigh.
+	//
+	// So the sharing is scheduled, not permanent. This height is far enough
+	// out to give a native Lattice miner time to appear — mining demand being
+	// the thing that makes someone write one — and near enough that the chain
+	// does not sit in a borrowed domain indefinitely.
+	//
+	// Must not activate before SaltedSeedForkHeight: V4 supersedes V3.
+	LatticeSeedForkHeight int32
+
 	// Mempool parameters
 	RelayNonStdTxs bool
 
@@ -334,11 +356,22 @@ func (p *Params) IsSaltedSeedForkActive(height int32) bool {
 	return p.SaltedSeedForkHeight != 0 && height >= p.SaltedSeedForkHeight
 }
 
+// IsLatticeSeedForkActive reports whether the Lattice-domain noise-seed hardfork
+// is active at the given block height. The fork is disabled when
+// LatticeSeedForkHeight is 0.
+func (p *Params) IsLatticeSeedForkActive(height int32) bool {
+	return p.LatticeSeedForkHeight != 0 && height >= p.LatticeSeedForkHeight
+}
+
 // RequiredCertVersion returns the block certificate version that a block at the
-// given height must use under the strict hardfork cutovers: V3 at and after the
-// salted noise-seed fork, V2 at and after the MoE fork, V1 before both (and
-// always, when the forks are disabled).
+// given height must use under the strict hardfork cutovers: V4 at and after the
+// Lattice-domain seed fork, V3 at and after the salted noise-seed fork, V2 at
+// and after the MoE fork, V1 before them all (and always, when the forks are
+// disabled).
 func (p *Params) RequiredCertVersion(height int32) wire.CertificateVersion {
+	if p.IsLatticeSeedForkActive(height) {
+		return wire.CertificateVersionV4
+	}
 	if p.IsSaltedSeedForkActive(height) {
 		return wire.CertificateVersionV3
 	}
@@ -380,6 +413,11 @@ var MainNetParams = Params{
 	RankPenaltyForkHeight: 1,
 
 	SaltedSeedForkHeight: 1,
+
+	// Six months of 40-second blocks — an eighth of an emission epoch — for
+	// a native Lattice miner to appear before the chain leaves Pearl's PoW
+	// domain. See LatticeSeedForkHeight.
+	LatticeSeedForkHeight: 394200,
 
 	// Checkpoints ordered from oldest to newest, one per 10000 blocks.
 	// Add the next multiple once it is at least CheckpointConfirmations
@@ -465,6 +503,10 @@ var RegressionNetParams = Params{
 	RankPenaltyForkHeight: 1,
 
 	SaltedSeedForkHeight: 1,
+
+	// Disabled: regtest exercises the V3 domain, and the cutover has its own
+	// test that sets this height explicitly.
+	LatticeSeedForkHeight: 0,
 
 	// Chain parameters
 	GenesisBlock:         &regTestGenesisBlock,
@@ -578,6 +620,10 @@ var TestNetParams = Params{
 
 	SaltedSeedForkHeight: 1,
 
+	// Twenty days of 40-second blocks, so the testnets rehearse the cutover
+	// well before mainnet reaches it.
+	LatticeSeedForkHeight: 43200,
+
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,
 
@@ -674,6 +720,10 @@ var TestNet2Params = Params{
 
 	SaltedSeedForkHeight: 1,
 
+	// Twenty days of 40-second blocks, so the testnets rehearse the cutover
+	// well before mainnet reaches it.
+	LatticeSeedForkHeight: 43200,
+
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: nil,
 
@@ -753,6 +803,10 @@ var SimNetParams = Params{
 	MoEForkHeight: 1,
 
 	SaltedSeedForkHeight: 1,
+
+	// Disabled: simnet mines placeholder certificates and never verifies a
+	// proof, so a seed-domain cutover would be decorative here.
+	LatticeSeedForkHeight: 0,
 
 	// Chain parameters
 	GenesisBlock:          &simNetGenesisBlock,

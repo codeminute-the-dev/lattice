@@ -34,6 +34,9 @@ Version-first design enables polymorphic decoding:
 	CertificateV3: identical layout to CertificateV2; the version selects the
 	  salted noise-seed derivation.
 
+	CertificateV4: identical layout to CertificateV3; the version selects
+	  Lattice's own noise-seed salts in place of the inherited Pearl ones.
+
 KEY DESIGN: SYMMETRIC SERIALIZATION
 
 Certificate types implement perfectly mirrored Serialize/Deserialize methods:
@@ -43,8 +46,8 @@ Certificate types implement perfectly mirrored Serialize/Deserialize methods:
 
 # NETWORK RESTRICTIONS
 
-CertificateVersionV1, CertificateVersionV2 and CertificateVersionV3 are allowed.
-IsCertVersionAllowed(v) returns true for all three. blockchain.checkBlockSanity
+CertificateVersionV1 through CertificateVersionV4 are allowed.
+IsCertVersionAllowed(v) returns true for all four. blockchain.checkBlockSanity
 also validates via IsCertVersionAllowed.
 
 # GENESIS BLOCKS
@@ -82,6 +85,7 @@ const (
 	CertificateVersionV1   CertificateVersion = 1
 	CertificateVersionV2   CertificateVersion = 2
 	CertificateVersionV3   CertificateVersion = 3
+	CertificateVersionV4   CertificateVersion = 4
 )
 
 // BlockCertificate is the interface that all certificate types must implement.
@@ -118,7 +122,8 @@ type BlockCertificate interface {
 // IsCertVersionAllowed reports whether certificate version v is permitted.
 func IsCertVersionAllowed(v CertificateVersion) bool {
 	switch v {
-	case CertificateVersionV1, CertificateVersionV2, CertificateVersionV3:
+	case CertificateVersionV1, CertificateVersionV2, CertificateVersionV3,
+		CertificateVersionV4:
 		return true
 	default:
 		return false
@@ -172,6 +177,9 @@ func (m *MsgCertificate) LatDecode(r io.Reader, pver uint32) error {
 
 	case CertificateVersionV3:
 		m.Certificate = &CertificateV3{}
+
+	case CertificateVersionV4:
+		m.Certificate = &CertificateV4{}
 
 	default:
 		return fmt.Errorf("unsupported certificate version: %d", version)

@@ -55,7 +55,8 @@ func defaultMiningConfig(e, topK uint32) ([miningConfigSize]byte, error) {
 }
 
 // Mine mines a standard (non-MoE) block using the default dimensions, producing a
-// certificate of the given version (V2 legacy derivation, V3 salted derivation).
+// certificate of the given version (V2 legacy derivation, V3 salted under Pearl's
+// seed domain, V4 salted under Lattice's own).
 // This function modifies header.ProofCommitment to match the mined certificate.
 func Mine(header *wire.BlockHeader, certVersion wire.CertificateVersion) (wire.BlockCertificate, error) {
 	cHeader := blockHeaderToC(header)
@@ -101,6 +102,9 @@ func newCertificate(header *wire.BlockHeader, certVersion wire.CertificateVersio
 		cert, payload = c, c
 	case wire.CertificateVersionV3:
 		c := &wire.CertificateV3{}
+		cert, payload = c, &c.CertificateV2
+	case wire.CertificateVersionV4:
+		c := &wire.CertificateV4{}
 		cert, payload = c, &c.CertificateV2
 	default:
 		return nil, fmt.Errorf("mining does not support certificate version %d", certVersion)

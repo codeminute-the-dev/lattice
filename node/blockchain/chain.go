@@ -2234,6 +2234,18 @@ func New(config *Config) (*BlockChain, error) {
 		return nil, AssertError("blockchain.New SaltedSeedForkHeight must not " +
 			"precede MoEForkHeight")
 	}
+	if config.ChainParams.LatticeSeedForkHeight < 0 {
+		return nil, AssertError("blockchain.New LatticeSeedForkHeight must be >= 0")
+	}
+	// V4 supersedes V3, so the Lattice-domain cutover cannot precede the V3 one.
+	// A Lattice-domain fork without a salted-seed fork underneath it would also
+	// leave no height at which V3 is required, so require that one too.
+	if config.ChainParams.LatticeSeedForkHeight != 0 &&
+		(config.ChainParams.SaltedSeedForkHeight == 0 ||
+			config.ChainParams.LatticeSeedForkHeight < config.ChainParams.SaltedSeedForkHeight) {
+		return nil, AssertError("blockchain.New LatticeSeedForkHeight must not " +
+			"precede SaltedSeedForkHeight")
+	}
 
 	// Generate a checkpoint by height map from the provided checkpoints
 	// and assert the provided checkpoints are sorted by height as required.

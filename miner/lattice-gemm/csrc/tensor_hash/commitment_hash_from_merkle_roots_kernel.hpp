@@ -3,8 +3,14 @@
 namespace lattice {
 
 // V3 domain-separation salts, encoded as little-endian u32 words. These are
-// blake3("lattice/cert-v3/noise-seed/{A,B}"), hardcoded so the derivation doesn't
-// depend on runtime string hashing.
+// blake3("pearl/cert-v3/noise-seed/{A,B}"), hardcoded so the derivation doesn't
+// depend on runtime string hashing. Lattice's V3 work function is Pearl's, byte
+// for byte, so that third-party miners for Pearl's algorithm produce valid
+// Lattice work; see zk-pow/src/api/seed.rs.
+//
+// V4 (Lattice's own salts, from LatticeSeedForkHeight onward) is not
+// implemented here. This kernel needs sm90 hardware and is not the miner the
+// chain expects to be running by that height.
 __device__ __constant__ uint32_t
     SEED_SALT_A_U32[blake3::CHAINING_VALUE_SIZE_U32] = {
         0x6C404982, 0x1615EDA0, 0x92F61696, 0xF876F0FC,

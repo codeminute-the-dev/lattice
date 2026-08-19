@@ -642,6 +642,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-blake3"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "pyo3",
+ "rayon",
+ "serde",
+ "serde_with",
+]
+
+[[package]]
 name = "layout-macro"
 version = "0.1.0"
 dependencies = [
@@ -799,18 +811,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lattice-blake3"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake3",
- "pyo3",
- "rayon",
- "serde",
- "serde_with",
-]
-
-[[package]]
 name = "plonky2"
 version = "1.1.0"
 dependencies = [
@@ -950,8 +950,8 @@ version = "0.3.1"
 dependencies = [
  "blake3",
  "env_logger 0.10.2",
- "lazy_static",
  "lattice-blake3",
+ "lazy_static",
  "primitive-types 0.12.2",
  "pyo3",
  "rayon",
@@ -1805,10 +1805,10 @@ dependencies = [
  "env_logger 0.10.2",
  "hashbrown 0.14.5",
  "itertools 0.14.0",
+ "lattice-blake3",
  "layout-macro",
  "lazy_static",
  "log",
- "lattice-blake3",
  "plonky2",
  "plonky2_field",
  "plonky2_maybe_rayon",
