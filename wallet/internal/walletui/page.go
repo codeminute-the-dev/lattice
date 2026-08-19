@@ -2,13 +2,16 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package main
+package walletui
 
-// indexHTML is the whole UI. It is one file on purpose: the page must load
+// IndexHTML is the whole UI. It is one file on purpose: the page must load
 // with no external fetches (the CSP forbids them), and a wallet UI with no
 // build step is one fewer thing that can go quietly wrong between the source
 // you read and the page you type a passphrase into.
-const indexHTML = `<!doctype html>
+//
+// Exported so the standalone server and the desktop app render the identical
+// page — one wallet, two ways to open it.
+const IndexHTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">

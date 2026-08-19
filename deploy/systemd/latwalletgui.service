@@ -1,0 +1,16 @@
+[Unit]
+Description=Lattice wallet web UI (loopback only)
+Documentation=https://github.com/codeminute-the-dev/lattice
+After=latwallet.service
+Wants=latwallet.service
+
+[Service]
+Type=simple
+# Binds 127.0.0.1 only and prints a fresh per-run token to the journal; read it
+# with: journalctl --user -u latwalletgui -n 5
+ExecStart=%h/Desktop/lattice/bin/latwalletgui -conf %h/.latticed/latticed.conf
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

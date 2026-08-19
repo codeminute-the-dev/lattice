@@ -1,0 +1,16 @@
+[Unit]
+Description=Lattice wallet daemon
+Documentation=https://github.com/codeminute-the-dev/lattice
+After=latticed.service
+Wants=latticed.service
+
+[Service]
+Type=simple
+# Credentials come from latticed.conf via the wrapper rather than the command
+# line, so they do not show up in ps for every user on the box.
+ExecStart=%h/Desktop/lattice/deploy/systemd/latwallet-start.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
