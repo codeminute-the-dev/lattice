@@ -68,6 +68,25 @@ gateway — see [`../docs/solo-mining.md`](../docs/solo-mining.md).
 For CPU mining while developing, use simnet or regtest, which do support
 `generate`.
 
+## The seed node
+
+Everything above runs at home, which cannot accept inbound connections behind
+CGNAT. A node in that position participates fully — it dials out, syncs, relays,
+and mines — but it cannot be the thing newcomers connect *to*, so the network
+needs exactly one machine with a real address.
+
+`deploy/seed/` has the bootstrap script and the details. In short: one small
+cloud box, `sudo bash bootstrap.sh`, then two things the script cannot do for
+you — an ingress rule for TCP 44108 in the provider's firewall, and an A record
+for `seeder1.lattice.codeminute.dev` pointing at the box.
+
+A single A record is the entire seeder. `connmgr.SeedFromDNS` resolves the
+hostname and dials every address it gets back on the network's default port, so
+the `dnsseeder` daemon in this repo is only needed later, when there are enough
+nodes for a static record to stop being honest.
+
+Once a real peer exists, the local `latticed-peer` stand-in can go away.
+
 ## Surviving a reboot
 
 All units are `enabled` and the account has `Linger=yes`, so they start at boot
