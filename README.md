@@ -152,11 +152,21 @@ go test -tags xmss,zkpow ./...          # Go suite
 cd zk-pow && cargo test --release --no-default-features   # Rust suite
 ```
 
+## Live
+
+- **Website:** <https://lattice.codeminute.dev>
+- **Emission endpoint:** <https://lattice.codeminute.dev/status> (the JSON from
+  `latctl getnextreset`, read-only)
+
+Deployment notes, including systemd units, are in [`deploy/`](deploy/).
+
 ## Status
 
-**Alpha, version 0.1.0.** There is no public network. Mainnet parameters are
-defined but no mainnet is running, and the DNS seeds do not resolve. Run it on
-simnet or testnet and dogfood it; do not treat LATT as having value.
+**Alpha, version 0.1.0.** One mainnet node is running — the one behind the
+endpoint above — but the chain is at height 0: mainnet sets
+`GenerateSupported: false`, so blocks need the GPU miner and nobody has pointed
+one at it yet. There are no other peers and the DNS seeds do not resolve. Run it
+on simnet or testnet and dogfood it; do not treat LATT as having value.
 
 ## License
 

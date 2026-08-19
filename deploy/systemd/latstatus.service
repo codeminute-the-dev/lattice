@@ -1,0 +1,13 @@
+[Unit]
+Description=Lattice emission status endpoint (read-only)
+After=latticed.service
+Wants=latticed.service
+
+[Service]
+Type=simple
+ExecStart=%h/Desktop/lattice/bin/latstatus -conf %h/.latticed/latticed.conf -listen 127.0.0.1:8099 -origin https://lattice.codeminute.dev
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

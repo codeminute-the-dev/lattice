@@ -1,0 +1,13 @@
+[Unit]
+Description=Cloudflare tunnel for lattice.codeminute.dev
+After=network-online.target latsite.service latstatus.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config %h/.cloudflared/lattice.yml tunnel run
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

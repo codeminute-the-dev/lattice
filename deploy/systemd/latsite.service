@@ -1,0 +1,12 @@
+[Unit]
+Description=Lattice website (static)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/Desktop/lattice/bin/latsite -dir %h/Desktop/lattice/website -listen 127.0.0.1:8081
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Lattice full node (mainnet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/Desktop/lattice/bin/latticed
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

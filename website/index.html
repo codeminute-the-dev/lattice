@@ -253,7 +253,7 @@ footer a:hover { color: var(--accent); }
 <main id="top">
 
   <div class="wide hero">
-    <p class="tick mono">Alpha &middot; no public network yet &middot; <b>v0.1.0</b></p>
+    <p class="tick mono">Alpha &middot; mainnet node live, no blocks mined yet &middot; <b>v0.1.0</b></p>
     <h1>A coin you earn by doing real math.</h1>
     <p class="lede">
       Most mining burns electricity on guesswork &mdash; hashing random numbers until one
@@ -338,7 +338,7 @@ footer a:hover { color: var(--accent); }
       <div class="panel-head">
         <span class="dot" id="conn-dot"></span>
         <span class="status" id="conn-status">Reading from consensus constants</span>
-        <span class="status" style="margin-left:auto" id="conn-note">No node connected &mdash; live height unavailable</span>
+        <span class="status" style="margin-left:auto" id="conn-note">connecting&hellip;</span>
       </div>
       <dl class="grid-stats" id="stats">
         <div class="stat"><dt>Starting reward</dt><dd>2.000000 <small>LATT</small></dd></div>
@@ -537,10 +537,12 @@ go test ./node/blockchain/ -run TestGenesisMintsNothing -v</pre>
     <blockquote>
       <p>
         <strong>Where the project actually stands.</strong> Lattice is alpha software at
-        version 0.1.0. There is no public network running, the DNS seeds don't resolve, and
-        LATT has no price because there is nowhere to trade it and nothing to trade. Run it
-        on simnet, read the code, tell us what's wrong with it. Please don't treat it as an
-        investment &mdash; there is nothing to invest in yet.
+        version 0.1.0. A single mainnet node is running &mdash; the one feeding the panel
+        above &mdash; but the chain is still at height 0, because mining needs the GPU
+        miner and nobody has pointed one at it. There are no other peers, the DNS seeds
+        don't resolve yet, and LATT has no price because there is nowhere to trade it and
+        nothing to trade. Run it on simnet, read the code, tell us what's wrong with it.
+        Please don't treat it as an investment &mdash; there is nothing to invest in yet.
       </p>
     </blockquote>
   </section>
