@@ -652,6 +652,25 @@ footer a:hover { color: var(--accent); }
       runs short. Down to about 0.1% of hashrate, pooling buys you very little.
     </p>
 
+    <h3>Joining the network</h3>
+    <p>
+      Lattice runs over Tor while it is small. The node that carries the chain sits behind
+      CGNAT, where there is no port to forward because the public address belongs to the
+      carrier &mdash; so it is published as a hidden service instead. That costs nothing,
+      exposes no home IP, and works from anywhere.
+    </p>
+    <p>The seed address, which is meant to be public:</p>
+<pre>ghfd3ft7holjedao4w76dvvtdp2v3klm3wso7djcctt2cyz2sdes6zqd.onion:44108</pre>
+    <p>Add it to <code>~/.latticed/latticed.conf</code> along with your Tor SOCKS port:</p>
+<pre>onion=127.0.0.1:9050
+addpeer=ghfd3ft7holjedao4w76dvvtdp2v3klm3wso7djcctt2cyz2sdes6zqd.onion:44108</pre>
+    <p class="small">
+      You need Tor running locally (<code>apt install tor</code>). A DNS seed cannot
+      advertise this &mdash; an A record holds an IP, not a 56-character onion name &mdash;
+      so the address is published rather than discovered. A clearnet seed will join it once
+      there is one; the two coexist.
+    </p>
+
     <h3>Get started</h3>
     <p>Build the node and tools:</p>
 <pre><span class="cmt"># needs Go 1.26+, Rust, a C compiler</span>
