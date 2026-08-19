@@ -77,7 +77,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 body {
   margin: 0;
   background: var(--ground);
@@ -85,7 +85,6 @@ body {
   font-family: var(--f-body);
   font-size: 1.0625rem;
   line-height: 1.65;
-  font-weight: 400;
 }
 
 .spine { max-width: var(--spine); margin-inline: auto; padding-inline: 1.5rem; }
@@ -93,12 +92,12 @@ body {
 
 h1, h2, h3, .ui { font-family: var(--f-display); text-wrap: balance; }
 h1, h2, h3 { line-height: 1.12; letter-spacing: -0.02em; margin: 0; }
-h1 { font-size: clamp(2.6rem, 7vw, 4.25rem); font-weight: 700; }
-h2 { font-size: clamp(1.6rem, 3.4vw, 2.1rem); font-weight: 600; }
-h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2.5rem, 6.5vw, 4rem); font-weight: 700; }
+h2 { font-size: clamp(1.55rem, 3.2vw, 2rem); font-weight: 600; }
+h3 { font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.01em; }
 p  { margin: 0 0 1.1em; }
 a  { color: var(--accent); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
-a:focus-visible, button:focus-visible {
+a:focus-visible, button:focus-visible, input:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px;
 }
 
@@ -111,11 +110,16 @@ a:focus-visible, button:focus-visible {
 .small { font-size: 0.9375rem; color: var(--muted); }
 .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 
-/* Lattice points — the section rule. Each dot is a lattice site. */
 .rule {
   height: 1px; background-image: radial-gradient(circle, var(--line) 1px, transparent 1px);
   background-size: 12px 12px; background-position: center;
   margin: 4.5rem auto; max-width: var(--wide);
+}
+
+/* Reading progress — a lattice-thin line, not a loading bar. */
+#progress {
+  position: fixed; top: 0; left: 0; height: 2px; width: 0;
+  background: var(--accent); z-index: 40;
 }
 
 header.top {
@@ -135,67 +139,116 @@ header.top {
   color: var(--muted); text-decoration: none;
 }
 .topnav a:hover { color: var(--ink); }
-@media (max-width: 40rem) { .topnav a.hide-sm { display: none; } }
+@media (max-width: 46rem) { .topnav a.hide-sm { display: none; } }
 
 /* ---- Hero ---- */
-.hero { padding-block: 4.5rem 3rem; }
-.hero h1 { margin-bottom: 1.25rem; }
-.hero .lede { max-width: 32rem; }
+.hero { padding-block: 4rem 2.5rem; }
+.hero-grid { display: grid; gap: 2.5rem; grid-template-columns: 1fr; align-items: end; }
+@media (min-width: 60rem) { .hero-grid { grid-template-columns: 1.35fr 1fr; gap: 3.5rem; } }
+.hero h1 { margin-bottom: 1.15rem; }
+.hero .lede { max-width: 34rem; }
 .tick {
-  display: inline-flex; align-items: baseline; gap: 0.5rem;
-  font-family: var(--f-mono); font-size: 0.8125rem; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-family: var(--f-mono); font-size: 0.75rem; color: var(--muted);
   border: 1px solid var(--line); border-radius: 999px;
-  padding: 0.3rem 0.8rem; margin-bottom: 1.75rem; background: var(--surface);
+  padding: 0.28rem 0.75rem; margin-bottom: 1.6rem; background: var(--surface);
 }
 .tick b { color: var(--accent); font-weight: 500; }
 
-/* ---- The signature chart ---- */
+/* Live reward card in the hero — the number, big. */
+.livecard {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 3px; box-shadow: var(--shadow); padding: 1.25rem 1.35rem;
+}
+.livecard .k {
+  font-family: var(--f-display); font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.livecard .big {
+  font-family: var(--f-mono); font-size: 2.75rem; font-weight: 500;
+  letter-spacing: -0.03em; line-height: 1.05; margin: 0.3rem 0 0.1rem;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.livecard .big span { font-size: 1rem; color: var(--muted); letter-spacing: 0; }
+.livecard .sub { font-size: 0.875rem; color: var(--muted); margin: 0; }
+.livecard hr { border: 0; border-top: 1px solid var(--line); margin: 1rem 0; }
+.kv { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.875rem; padding: 0.18rem 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* ---- Instrument (the interactive chart) ---- */
 .scope {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 3px; box-shadow: var(--shadow); overflow: hidden;
 }
 .scope-head {
-  display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: baseline;
-  padding: 1rem 1.25rem; border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 0.6rem 1.25rem; align-items: center;
+  padding: 0.95rem 1.25rem; border-bottom: 1px solid var(--line);
 }
 .scope-head h3 { margin: 0; }
-.scope-legend { margin-left: auto; display: flex; gap: 1.1rem; font-size: 0.75rem; color: var(--muted); font-family: var(--f-display); }
-.scope-legend i { display: inline-block; width: 1.1rem; height: 2px; vertical-align: 0.22em; margin-right: 0.4rem; }
+.scope-tools { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.toggle {
+  font-family: var(--f-display); font-size: 0.75rem; font-weight: 500;
+  color: var(--muted); background: var(--sunk); border: 1px solid var(--line);
+  border-radius: 999px; padding: 0.3rem 0.75rem; cursor: pointer;
+}
+.toggle[aria-pressed="true"] { color: var(--surface); background: var(--accent); border-color: var(--accent); }
+.legend { display: flex; gap: 1rem; font-size: 0.72rem; color: var(--muted); font-family: var(--f-display); }
+.legend i { display: inline-block; width: 1.1rem; height: 2px; vertical-align: 0.22em; margin-right: 0.35rem; }
+.legend i.dash { background: repeating-linear-gradient(90deg, var(--copper) 0 3px, transparent 3px 6px); }
+
+.plot { position: relative; cursor: crosshair; touch-action: pan-y; }
 canvas { display: block; width: 100%; height: auto; }
+
+.readout {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  border-top: 1px solid var(--line); background: var(--sunk);
+}
+.readout div { padding: 0.7rem 1.25rem; border-right: 1px solid var(--line); }
+.readout div:last-child { border-right: 0; }
+.readout dt {
+  font-family: var(--f-display); font-size: 0.625rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.2rem;
+}
+.readout dd {
+  margin: 0; font-family: var(--f-mono); font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.scrub { padding: 0.85rem 1.25rem; border-top: 1px solid var(--line); }
+.scrub input[type=range] { width: 100%; accent-color: var(--accent); }
+.scrub label {
+  font-family: var(--f-display); font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  display: block; margin-bottom: 0.4rem;
+}
 .scope-foot {
-  padding: 0.75rem 1.25rem; border-top: 1px solid var(--line);
-  font-size: 0.8125rem; color: var(--muted); background: var(--sunk);
+  padding: 0.7rem 1.25rem; border-top: 1px solid var(--line);
+  font-size: 0.8125rem; color: var(--muted); background: var(--surface);
 }
 
-/* ---- Stat instrument panel ---- */
-.panel {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 3px;
-  box-shadow: var(--shadow);
-}
+/* ---- Panels ---- */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); }
 .panel-head {
   display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
-  padding: 1rem 1.25rem; border-bottom: 1px solid var(--line);
+  padding: 0.95rem 1.25rem; border-bottom: 1px solid var(--line);
 }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .dot.live { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .status { font-family: var(--f-display); font-size: 0.8125rem; color: var(--muted); }
-.grid-stats {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-}
-.stat { padding: 1.1rem 1.25rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.stat { padding: 1.05rem 1.25rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .stat:last-child { border-right: 0; }
 .stat dt {
   font-family: var(--f-display); font-size: 0.6875rem; font-weight: 600;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem;
 }
 .stat dd {
-  margin: 0; font-family: var(--f-mono); font-size: 1.375rem; font-weight: 500;
+  margin: 0; font-family: var(--f-mono); font-size: 1.3125rem; font-weight: 500;
   font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--ink);
 }
 .stat dd small { font-size: 0.8125rem; color: var(--muted); font-weight: 400; }
 .stat.pending dd { color: var(--muted); }
-
-.countdown { padding: 1.25rem; display: grid; gap: 0.5rem; }
+.countdown { padding: 1.15rem 1.25rem; display: grid; gap: 0.5rem; }
 .countdown .row { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
 .bar { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width .6s ease; }
@@ -233,6 +286,11 @@ td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-num
 .card h3 { margin: 0 0 0.4rem; }
 .card p { margin: 0; font-size: 0.9375rem; color: var(--ink-soft); }
 
+figure { margin: 1.75rem 0; }
+figure svg { max-width: 100%; height: auto; display: block; color: var(--ink); }
+figcaption { font-size: 0.875rem; color: var(--muted); margin-top: 0.7rem; }
+.figwrap { overflow-x: auto; }
+
 footer {
   border-top: 1px solid var(--line); margin-top: 5rem; padding-block: 2.5rem 3.5rem;
   color: var(--muted); font-size: 0.9375rem;
@@ -241,33 +299,30 @@ footer a { color: var(--muted); }
 footer a:hover { color: var(--accent); }
 .footlinks { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1.25rem; font-family: var(--f-display); font-size: 0.875rem; }
 
-/* Small screens: tighten the vertical rhythm and let the instrument panels
-   breathe rather than crowding against the viewport edge. */
 @media (max-width: 34rem) {
   body { font-size: 1rem; }
   .spine, .wide { padding-inline: 1.15rem; }
   .hero { padding-block: 2.75rem 2rem; }
   .lede { font-size: 1.1875rem; }
   .rule { margin: 3rem auto; }
-  .scope-head { gap: 0.35rem; }
-  .scope-legend { margin-left: 0; width: 100%; gap: 0.9rem; }
-  .stat { padding: 0.9rem 1.1rem; }
-  .stat dd { font-size: 1.25rem; }
-  .panel-head { gap: 0.5rem; }
-  .panel-head .status { font-size: 0.75rem; }
-  /* The auto-fit grid wraps here, so a per-cell right border leaves ragged
-     stubs at the wrap points. */
-  .stat { border-right: 0; }
+  .scope-tools { margin-left: 0; width: 100%; }
+  .legend { gap: 0.85rem; }
+  .stat, .readout div { border-right: 0; }
+  .stat dd { font-size: 1.2rem; }
+  .livecard .big { font-size: 2.25rem; }
   pre { font-size: 0.75rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 </style>
 </head>
 
 <body>
+<div id="progress"></div>
+
 <header class="top">
   <div class="wide topbar">
     <a class="brand" href="#top">
@@ -281,7 +336,8 @@ footer a:hover { color: var(--accent); }
       Lattice
     </a>
     <nav class="topnav">
-      <a href="#schedule">Schedule</a>
+      <a href="#how">How it works</a>
+      <a href="#schedule">Emission</a>
       <a href="#mine">Mine</a>
       <a href="#wallet" class="hide-sm">Wallet</a>
       <a href="#fair" class="hide-sm">Fair launch</a>
@@ -293,38 +349,72 @@ footer a:hover { color: var(--accent); }
 <main id="top">
 
   <div class="wide hero">
-    <p class="tick mono">Alpha &middot; mainnet node live, no blocks mined yet &middot; <b>v0.1.0</b></p>
-    <h1>A coin you earn by doing real math.</h1>
-    <p class="lede">
-      Most mining burns electricity on guesswork &mdash; hashing random numbers until one
-      happens to fit. Lattice pays for <em>matrix multiplication</em>: the same arithmetic
-      that runs machine learning. The work still secures the chain, but it isn't invented
-      busywork.
-    </p>
+    <div class="hero-grid">
+      <div>
+        <p class="tick mono"><span class="dot" id="hero-dot"></span> <span id="hero-tick">mainnet node live &middot; height 0</span> &middot; <b>v0.1.0</b></p>
+        <h1>A coin you earn by doing real math.</h1>
+        <p class="lede">
+          Most mining burns electricity on guesswork &mdash; hashing random numbers until one
+          happens to fit. Lattice pays for <em>matrix multiplication</em>: the same arithmetic
+          that runs machine learning. The work still secures the chain, but it isn't invented
+          busywork.
+        </p>
+      </div>
+
+      <div class="livecard">
+        <div class="k">Block reward right now</div>
+        <p class="big" id="hero-reward">2.000000 <span>LATT</span></p>
+        <p class="sub" id="hero-reward-sub">every block, about every 40 seconds</p>
+        <hr>
+        <dl style="margin:0">
+          <div class="kv"><dt>Next reward reset</dt><dd id="hero-reset">block 3,153,601</dd></div>
+          <div class="kv"><dt>Blocks remaining</dt><dd id="hero-remaining">3,153,601</dd></div>
+          <div class="kv"><dt>Total mined</dt><dd id="hero-supply">0 LATT</dd></div>
+        </dl>
+      </div>
+    </div>
   </div>
 
   <div class="wide">
     <div class="scope">
       <div class="scope-head">
-        <h3>The block reward, forever</h3>
-        <div class="scope-legend">
-          <span><i style="background:var(--accent)"></i>reward per block</span>
-          <span><i style="background:var(--copper)"></i>reset</span>
+        <h3>Twelve years of block rewards</h3>
+        <div class="scope-tools">
+          <div class="legend">
+            <span><i style="background:var(--accent)"></i>Lattice</span>
+            <span id="lg-halving" hidden><i class="dash"></i>halving, for comparison</span>
+          </div>
+          <button class="toggle" id="cmp" type="button" aria-pressed="false">Compare with halving</button>
         </div>
       </div>
-      <canvas id="sawtooth" aria-label="Chart of the Lattice block reward over twelve years. The reward starts at 2 LATT and decays gradually to about 1.71 LATT over four years, then resets back to 2 LATT and repeats."></canvas>
+
+      <div class="plot" id="plot">
+        <canvas id="sawtooth" aria-label="Chart of the Lattice block reward over twelve years. The reward starts at 2 LATT and decays gradually to about 1.71 LATT over four years, then resets back to 2 LATT and repeats."></canvas>
+      </div>
+
+      <dl class="readout">
+        <div><dt>At year</dt><dd id="r-year">0.00</dd></div>
+        <div><dt>Block</dt><dd id="r-block">1</dd></div>
+        <div><dt>Reward</dt><dd id="r-reward">2.000000</dd></div>
+        <div><dt>Minted this epoch</dt><dd id="r-minted">0</dd></div>
+      </dl>
+
+      <div class="scrub">
+        <label for="scrub">Scrub the schedule &mdash; drag on the chart, or use this slider</label>
+        <input type="range" id="scrub" min="0" max="1000" value="0" step="1"
+               aria-label="Position in the emission schedule, from year zero to year twelve">
+      </div>
+
       <div class="scope-foot">
-        Twelve years of mainnet emission, drawn from the same constants the node enforces.
-        The reward slides from 2.000 to 1.715 LATT across four years, then snaps back.
-        <strong>Note the vertical axis starts at 1.6, not 0</strong> &mdash; at true scale the
-        decay would be almost invisible, which is rather the point.
+        Drawn from the same constants the node enforces. The vertical axis starts at 1.6, not 0
+        &mdash; at true scale the decay would be almost invisible, which is rather the point.
       </div>
     </div>
   </div>
 
   <div class="rule"></div>
 
-  <section class="spine prose">
+  <section id="how" class="spine prose">
     <p class="eyebrow">In plain terms</p>
     <h2>What Lattice actually is</h2>
     <p>
@@ -338,11 +428,96 @@ footer a:hover { color: var(--accent); }
       the multiplication correctly. Anyone can check the proof in milliseconds without
       redoing the work.
     </p>
-    <p>
-      Matrix multiplication is the core operation of machine learning. So the hardware that
-      mines Lattice is ordinary GPU and accelerator hardware, and the arithmetic it performs
-      is the same shape as real numerical work.
-    </p>
+  </section>
+
+  <div class="wide">
+    <figure>
+      <div class="figwrap">
+        <svg viewBox="0 0 820 300" role="img" width="820"
+             aria-label="Two mining pipelines compared. In conventional proof-of-work a block header is hashed about ten to the twenty-second times until a digest falls below target, and every node re-runs the hash to verify. In Lattice the header seeds two integer matrices, the miner multiplies them and emits a zero-knowledge certificate, and nodes verify by checking the certificate in milliseconds rather than repeating the multiplication.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+            <marker id="ah-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"/>
+            </marker>
+          </defs>
+
+          <!-- lane 1: conventional -->
+          <text x="16" y="26" font-family="Archivo, sans-serif" font-size="12" font-weight="600"
+                letter-spacing="1.2" fill="currentColor" opacity="0.55">CONVENTIONAL PROOF-OF-WORK</text>
+
+          <rect x="16" y="44" width="150" height="46" rx="2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="91" y="72" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">block header</text>
+
+          <line x1="166" y1="67" x2="230" y2="67" stroke="currentColor" stroke-opacity="0.5" marker-end="url(#ah)"/>
+          <text x="198" y="59" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" fill="currentColor" opacity="0.7">+ nonce</text>
+
+          <rect x="236" y="44" width="190" height="46" rx="2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="331" y="66" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">SHA-256, again</text>
+          <text x="331" y="82" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity="0.65">~10²² times</text>
+
+          <line x1="426" y1="67" x2="490" y2="67" stroke="currentColor" stroke-opacity="0.5" marker-end="url(#ah)"/>
+          <text x="458" y="59" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" fill="currentColor" opacity="0.7">digest</text>
+
+          <rect x="496" y="44" width="150" height="46" rx="2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="571" y="66" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">below target?</text>
+          <text x="571" y="82" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" fill="currentColor" opacity="0.65">almost never</text>
+
+          <line x1="646" y1="67" x2="706" y2="67" stroke="currentColor" stroke-opacity="0.5" marker-end="url(#ah)"/>
+          <rect x="712" y="44" width="92" height="46" rx="2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="758" y="72" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">block</text>
+
+          <text x="16" y="116" font-family="Archivo, sans-serif" font-size="12" fill="currentColor" opacity="0.75">
+            Verify: every node re-runs the hash. The discarded digests are useful to nobody.
+          </text>
+
+          <!-- divider -->
+          <line x1="16" y1="140" x2="804" y2="140" stroke="currentColor" stroke-opacity="0.15"/>
+
+          <!-- lane 2: lattice -->
+          <text x="16" y="172" font-family="Archivo, sans-serif" font-size="12" font-weight="600"
+                letter-spacing="1.2" fill="var(--accent)">LATTICE</text>
+
+          <rect x="16" y="190" width="150" height="46" rx="2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="91" y="218" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">block header</text>
+
+          <line x1="166" y1="213" x2="230" y2="213" stroke="var(--accent)" marker-end="url(#ah-a)"/>
+          <text x="198" y="205" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" fill="var(--accent)">seeds A, B</text>
+
+          <rect x="236" y="190" width="190" height="46" rx="2" fill="var(--accent-dim)" stroke="var(--accent)"/>
+          <text x="331" y="212" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">multiply the matrices</text>
+          <text x="331" y="228" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity="0.7">int8, once</text>
+
+          <line x1="426" y1="213" x2="490" y2="213" stroke="var(--accent)" marker-end="url(#ah-a)"/>
+          <text x="458" y="205" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" fill="var(--accent)">proves</text>
+
+          <rect x="496" y="190" width="150" height="46" rx="2" fill="var(--accent-dim)" stroke="var(--accent)"/>
+          <text x="571" y="212" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">ZK certificate</text>
+          <text x="571" y="228" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" fill="currentColor" opacity="0.7">a few kilobytes</text>
+
+          <line x1="646" y1="213" x2="706" y2="213" stroke="var(--accent)" marker-end="url(#ah-a)"/>
+          <rect x="712" y="190" width="92" height="46" rx="2" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+          <text x="758" y="218" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" fill="currentColor">block</text>
+
+          <text x="16" y="262" font-family="Archivo, sans-serif" font-size="12" fill="currentColor" opacity="0.75">
+            Verify: nodes check the certificate in milliseconds. Nobody repeats the multiplication.
+          </text>
+          <text x="16" y="284" font-family="Archivo, sans-serif" font-size="12" fill="currentColor" opacity="0.75">
+            The arithmetic is the same shape commodity ML accelerators already run.
+          </text>
+        </svg>
+      </div>
+      <figcaption>
+        Both pipelines end in a valid block. What differs is the work itself &mdash; repeated
+        hashing versus a single matrix multiply &mdash; and what verification checks: conventional
+        proof-of-work re-runs the hash, while Lattice checks a proof instead of redoing the work.
+      </figcaption>
+    </figure>
+  </div>
+
+  <section class="spine prose">
     <blockquote>
       <p>
         <strong>An honest caveat.</strong> The matrices miners multiply are generated by the
@@ -364,13 +539,13 @@ footer a:hover { color: var(--accent); }
 
   <section id="schedule" class="wide">
     <div class="spine prose" style="padding-inline:0">
-      <p class="eyebrow">Tokenomics</p>
+      <p class="eyebrow">Emission</p>
       <h2>The reward resets. On a schedule anyone can check.</h2>
       <p>
         Every block pays a reward. It starts at exactly <strong>2 LATT</strong> and decays
         smoothly &mdash; no halvings, no cliffs. After roughly four years the schedule
         <em>resets</em>: the reward jumps back to 2 LATT and the curve starts over. This
-        repeats indefinitely.
+        repeats indefinitely. Scrub the chart above to see any point on it.
       </p>
     </div>
 
@@ -393,7 +568,7 @@ footer a:hover { color: var(--accent); }
       <div class="countdown">
         <div class="row">
           <span class="eyebrow" style="margin:0">Next reset</span>
-          <span class="mono" id="cd-text" style="color:var(--muted)">connect a node to see the countdown</span>
+          <span class="mono" id="cd-text" style="color:var(--muted)">waiting for the node&hellip;</span>
         </div>
         <div class="bar"><span id="cd-bar"></span></div>
       </div>
@@ -409,7 +584,10 @@ footer a:hover { color: var(--accent); }
       </p>
       <p>
         Lattice doesn't take that bet. The curve restarts on a fixed schedule, so miners in
-        year twenty are paid about what miners in year one were paid.
+        year twenty are paid about what miners in year one were paid. Turn on
+        <strong>Compare with halving</strong> above to see the two side by side: by year
+        twelve a halving schedule pays a quarter of where it started, while Lattice is back
+        at 2 LATT.
       </p>
       <blockquote>
         <p>
@@ -420,22 +598,6 @@ footer a:hover { color: var(--accent); }
           at launch and computable by anyone, offline, today.
         </p>
       </blockquote>
-
-      <h3>What the curve does</h3>
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th>Point in epoch</th><th class="num">Block</th><th class="num">Reward</th></tr></thead>
-          <tbody>
-            <tr><td>First block</td><td class="num">1</td><td class="num">2.000000</td></tr>
-            <tr><td>After a day</td><td class="num">2,160</td><td class="num">1.999781</td></tr>
-            <tr><td>After a month</td><td class="num">65,700</td><td class="num">1.993350</td></tr>
-            <tr><td>After a year</td><td class="num">788,400</td><td class="num">1.922338</td></tr>
-            <tr><td>After two years</td><td class="num">1,576,800</td><td class="num">1.849113</td></tr>
-            <tr><td>Last block of epoch</td><td class="num">3,153,600</td><td class="num">1.714678</td></tr>
-            <tr><td><strong>Reset &mdash; next block</strong></td><td class="num">1</td><td class="num"><strong>2.000000</strong></td></tr>
-          </tbody>
-        </table>
-      </div>
 
       <h3>Three guarantees</h3>
       <div class="cards">
@@ -621,6 +783,7 @@ go test ./node/blockchain/ -run TestGenesisMintsNothing -v</pre>
       <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/emission.md">Emission</a>
       <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/solo-mining.md">Mining guide</a>
       <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/anti-asic.md">ASIC policy</a>
+      <a href="/status">Live emission data</a>
       <a href="https://github.com/pearl-research-labs/pearl">Pearl (upstream)</a>
     </div>
     <p class="small" style="margin:0">
@@ -636,107 +799,173 @@ go test ./node/blockchain/ -run TestGenesisMintsNothing -v</pre>
 
 /* Consensus constants, mirroring node/chaincfg/emission.go (mainnet). */
 const K = 39420000, S_LATT = 78840002, EPOCH = 3153600, BLOCK_SECS = 40;
+const EPOCHS_SHOWN = 3;
+const SECS_PER_YEAR = 31557600;
 
-/* reward(i) = S*k / ((i+k)(i-1+k)), evaluated in LATT. */
-function reward(i) {
-  return (S_LATT * K) / ((i + K) * (i - 1 + K));
-}
+/* reward(i) = S*k / ((i+k)(i-1+k)) — the reward for the i-th block of an epoch. */
+const reward = i => (S_LATT * K) / ((i + K) * (i - 1 + K));
+/* cumulative(i) = S*i / (i+k) — telescoped sum of the above. */
+const minted = i => (S_LATT * i) / (i + K);
 
-/* ---------- the sawtooth ---------- */
-const cv = document.getElementById("sawtooth");
-const ctx = cv.getContext("2d");
+const fmt = new Intl.NumberFormat("en-US");
+const el = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-function css(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
+/* ---------------- chart ---------------- */
+const cv = el("sawtooth"), ctx = cv.getContext("2d");
+let compare = false, cursor = 0;           /* cursor: 0..1 across the whole span */
+let geom = { padL: 46, padR: 14, padT: 16, padB: 26, w: 0, h: 0 };
 
 function drawChart() {
   const wrap = cv.parentElement.getBoundingClientRect();
   const w = Math.max(320, wrap.width);
-  const h = Math.max(220, Math.min(360, w * 0.34));
+  const h = Math.max(210, Math.min(340, w * 0.33));
   const dpr = window.devicePixelRatio || 1;
-  cv.width = w * dpr; cv.height = h * dpr;
-  cv.style.height = h + "px";
+  cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + "px";
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  const padL = 46, padR = 14, padT = 16, padB = 26;
+  const { padL, padR, padT, padB } = geom;
   const plotW = w - padL - padR, plotH = h - padT - padB;
+  geom.w = w; geom.h = h;
 
-  const EPOCHS = 3;                 // 12 years
-  const yMin = 1.6, yMax = 2.05;
-  const x = t => padL + t * plotW;                       // t in [0,1] across all epochs
-  const y = v => padT + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+  /* Comparing against a halving schedule needs the full range; on its own the
+     curve is better served by a tight window that makes the decay visible. */
+  const yMin = compare ? 0 : 1.6, yMax = compare ? 2.1 : 2.05;
+  const X = t => padL + t * plotW;
+  const Y = v => padT + (1 - (v - yMin) / (yMax - yMin)) * plotH;
 
   const line = css("--line"), muted = css("--muted");
   const accent = css("--accent"), copper = css("--copper");
 
-  /* horizontal gridlines + y labels */
   ctx.font = '11px "JetBrains Mono", monospace';
   ctx.textAlign = "right"; ctx.textBaseline = "middle";
-  for (const v of [1.6, 1.7, 1.8, 1.9, 2.0]) {
+  const ticks = compare ? [0, 0.5, 1, 1.5, 2] : [1.6, 1.7, 1.8, 1.9, 2.0];
+  for (const v of ticks) {
     ctx.strokeStyle = line; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, Math.round(y(v)) + .5); ctx.lineTo(w - padR, Math.round(y(v)) + .5); ctx.stroke();
-    ctx.fillStyle = muted; ctx.fillText(v.toFixed(1), padL - 8, y(v));
+    ctx.beginPath();
+    ctx.moveTo(padL, Math.round(Y(v)) + .5); ctx.lineTo(w - padR, Math.round(Y(v)) + .5);
+    ctx.stroke();
+    ctx.fillStyle = muted; ctx.fillText(v.toFixed(1), padL - 8, Y(v));
   }
 
-  /* reward curve, sampled per pixel column */
+  const cols = Math.max(1, Math.floor(plotW));
+  const blockAt = t => t * EPOCHS_SHOWN * EPOCH;
+  const inEpoch = b => (b % EPOCH) + 1;
+
+  /* halving overlay first, so the Lattice curve sits on top */
+  if (compare) {
+    ctx.strokeStyle = copper; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    for (let c = 0; c <= cols; c++) {
+      const t = c / cols;
+      const era = Math.floor(blockAt(t) / EPOCH);
+      const v = 2 / Math.pow(2, era);
+      const px = X(t), py = Y(v);
+      if (c === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  /* Lattice reward, with the pen lifted at each reset so the snap-back is not
+     drawn as a slope. */
   ctx.strokeStyle = accent; ctx.lineWidth = 2;
   ctx.lineJoin = "round"; ctx.lineCap = "round";
   ctx.beginPath();
-  const cols = Math.floor(plotW);
+  const step = EPOCH / cols;
   for (let c = 0; c <= cols; c++) {
-    const t = c / cols;
-    const block = t * EPOCHS * EPOCH;           // absolute block
-    const i = (block % EPOCH) + 1;              // position within epoch
-    const px = x(t), py = y(reward(i));
-    /* lift the pen at each reset so the snap-back isn't drawn as a slope */
-    if (c === 0 || i < 1 + (EPOCH / cols)) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    const t = c / cols, i = inEpoch(blockAt(t));
+    const px = X(t), py = Y(reward(i));
+    if (c === 0 || i < 1 + step) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   }
   ctx.stroke();
 
   /* reset markers */
-  ctx.setLineDash([3, 3]);
-  for (let e = 1; e < EPOCHS; e++) {
-    const t = e / EPOCHS;
-    ctx.strokeStyle = copper; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(x(t), padT); ctx.lineTo(x(t), padT + plotH); ctx.stroke();
+  ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5;
+  for (let e = 1; e < EPOCHS_SHOWN; e++) {
+    ctx.strokeStyle = copper;
+    ctx.beginPath(); ctx.moveTo(X(e / EPOCHS_SHOWN), padT); ctx.lineTo(X(e / EPOCHS_SHOWN), padT + plotH); ctx.stroke();
   }
   ctx.setLineDash([]);
 
-  /* x labels, in years */
+  /* x labels in years */
   ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = muted;
-  for (let e = 0; e <= EPOCHS; e++) {
-    const t = e / EPOCHS;
-    ctx.fillText((e * 4) + "y", x(t), padT + plotH + 8);
+  for (let e = 0; e <= EPOCHS_SHOWN; e++) {
+    ctx.fillText((e * 4) + "y", X(e / EPOCHS_SHOWN), padT + plotH + 8);
   }
   ctx.textAlign = "left";
-  ctx.fillStyle = muted;
   ctx.fillText("LATT", 6, padT - 4);
+
+  /* crosshair at the scrub position */
+  const t = cursor, i = inEpoch(blockAt(t));
+  const cx = X(t), cy = Y(reward(i));
+  ctx.strokeStyle = accent; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, padT + plotH); ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = accent;
+  ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = css("--surface"); ctx.lineWidth = 1.5; ctx.stroke();
 }
 
-drawChart();
+function updateReadout() {
+  const block = cursor * EPOCHS_SHOWN * EPOCH;
+  const i = (block % EPOCH) + 1;
+  el("r-year").textContent = (block * BLOCK_SECS / SECS_PER_YEAR).toFixed(2);
+  el("r-block").textContent = fmt.format(Math.round(block) + 1);
+  el("r-reward").textContent = reward(i).toFixed(6);
+  el("r-minted").textContent = fmt.format(Math.round(minted(i)));
+}
+
+function setCursor(t) {
+  cursor = Math.min(1, Math.max(0, t));
+  el("scrub").value = String(Math.round(cursor * 1000));
+  updateReadout(); drawChart();
+}
+
+/* pointer scrubbing */
+const plot = el("plot");
+function fromEvent(e) {
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left - geom.padL) / (r.width - geom.padL - geom.padR);
+  setCursor(x);
+}
+plot.addEventListener("pointerdown", e => { plot.setPointerCapture(e.pointerId); fromEvent(e); });
+plot.addEventListener("pointermove", e => { if (e.buttons || e.pointerType === "mouse") fromEvent(e); });
+el("scrub").addEventListener("input", e => setCursor(e.target.value / 1000));
+
+el("cmp").addEventListener("click", () => {
+  compare = !compare;
+  el("cmp").setAttribute("aria-pressed", String(compare));
+  el("lg-halving").hidden = !compare;
+  drawChart();
+});
+
+setCursor(0);
 let rAF;
 addEventListener("resize", () => { cancelAnimationFrame(rAF); rAF = requestAnimationFrame(drawChart); });
 if (window.matchMedia) {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  (mq.addEventListener ? mq.addEventListener.bind(mq, "change") : mq.addListener.bind(mq))(drawChart);
+  const redraw = () => drawChart();
+  mq.addEventListener ? mq.addEventListener("change", redraw) : mq.addListener(redraw);
 }
 
-/* ---------- live schedule ---------- */
-/* A small read-only endpoint returning the JSON from `latctl getnextreset`,
-   served same-origin by latstatus behind the tunnel. If it is unreachable the
-   page falls back to the schedule facts that hold regardless of chain state,
-   and says plainly that no node is connected. */
-const STATUS_URL = "/status";
+/* ---------------- reading progress ---------------- */
+addEventListener("scroll", () => {
+  const max = document.documentElement.scrollHeight - innerHeight;
+  el("progress").style.width = max > 0 ? (scrollY / max * 100) + "%" : "0";
+}, { passive: true });
 
-const fmt = new Intl.NumberFormat("en-US");
-const el = id => document.getElementById(id);
+/* ---------------- live node data ---------------- */
+/* A small read-only endpoint returning the JSON from `latctl getnextreset`,
+   served same-origin by latstatus. If it is unreachable the page falls back to
+   the schedule facts that hold regardless of chain state, and says so. */
+const STATUS_URL = "/status";
 
 function humanDuration(secs) {
   if (secs < 0) secs = 0;
   const d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600);
   const m = Math.floor(secs % 3600 / 60);
+  if (d > 365) return (d / 365.25).toFixed(1) + " years";
   if (d > 0) return d + "d " + h + "h";
   if (h > 0) return h + "h " + m + "m";
   return m + "m " + Math.floor(secs % 60) + "s";
@@ -744,34 +973,46 @@ function humanDuration(secs) {
 
 function applyStatus(d) {
   el("conn-dot").classList.add("live");
+  el("hero-dot").classList.add("live");
   el("conn-status").textContent = "Live from node";
   el("conn-note").textContent = "updated " + new Date().toLocaleTimeString();
 
+  el("hero-tick").textContent = "mainnet node live · height " + fmt.format(d.height);
+  /* At height 0 nothing has been mined yet, so the reward that matters to a
+     reader is the one the next block will pay. */
+  const shown = d.height > 0 ? d.currentreward : d.nextreward;
+  el("hero-reward").innerHTML = Number(shown).toFixed(6) + ' <span>LATT</span>';
+  el("hero-reward-sub").textContent = d.height > 0
+    ? "every block, about every " + d.targetblockseconds + " seconds"
+    : "what the next block will pay, about every " + d.targetblockseconds + " seconds";
+  el("hero-reset").textContent = "block " + fmt.format(d.nextresetheight);
+  el("hero-remaining").textContent = fmt.format(d.blocksuntilreset);
+  el("hero-supply").textContent = fmt.format(Math.round(d.totalsupply)) + " LATT";
+
   el("s-height").textContent = fmt.format(d.height);
-  el("s-reward").innerHTML = Number(d.currentreward).toFixed(6) + ' <small>LATT</small>';
+  el("s-reward").innerHTML = Number(shown).toFixed(6) + ' <small>LATT</small>';
   el("s-next").textContent = fmt.format(d.nextresetheight);
   el("s-supply").innerHTML = fmt.format(Math.round(d.totalsupply)) + ' <small>LATT</small>';
   for (const s of document.querySelectorAll(".stat.pending")) s.classList.remove("pending");
 
-  const left = d.blocksuntilreset;
   el("cd-text").innerHTML =
-    fmt.format(left) + " blocks &middot; ~" + humanDuration(d.estimatedsecondsuntilreset);
-  el("cd-bar").style.width = (100 * (1 - left / d.epochblocks)).toFixed(2) + "%";
+    fmt.format(d.blocksuntilreset) + " blocks &middot; ~" + humanDuration(d.estimatedsecondsuntilreset);
+  el("cd-bar").style.width = (100 * (1 - d.blocksuntilreset / d.epochblocks)).toFixed(2) + "%";
 }
 
 async function poll() {
-  if (!STATUS_URL) return;
   try {
     const r = await fetch(STATUS_URL, { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
     applyStatus(await r.json());
   } catch (e) {
     el("conn-status").textContent = "Reading from consensus constants";
-    el("conn-note").textContent = "Node unreachable — showing the fixed schedule only";
+    el("conn-note").textContent = "node unreachable — showing the fixed schedule only";
+    el("cd-text").textContent = "no node connected";
   }
 }
 poll();
-if (STATUS_URL) setInterval(poll, 20000);
+setInterval(poll, 20000);
 </script>
 </body>
 </html>
