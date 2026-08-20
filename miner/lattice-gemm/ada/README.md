@@ -15,37 +15,170 @@ TMA is a physical unit introduced in Hopper. Ada (sm_89) does not have it, so
 recompiling with a different `-gencode` moves the failure from link time to
 compile time rather than fixing anything.
 
-## Shared memory forces a retune too
+## The constraint that shapes everything: the tile is consensus-visible
 
-This is not only an instruction port. The default matmul config is
-`128x256x128` with 3 pipeline stages:
+The obvious way to fit Ada's smaller shared memory is to shrink the tile. That
+is not available here.
 
-    A per stage 16 KB + B per stage 32 KB, x3 stages = 144 KB
+Every MMA thread runs an independent PoW attempt over the C elements held in
+**its own registers**: `TileHashAccumulator` (`../csrc/gemm/pow_utils.hpp`)
+XOR-folds the thread's accumulator fragment once every `R / 32` k-blocks into a
+16-word BLAKE3 message block, and `check_pow_target` races that transcript
+against the target. When a thread wins, `write_host_signal_header` records the
+tile-relative rows and columns it held. Those become the proof's index lists
+(`lattice_gemm/helpers.py::extract_indices`), which the verifier parses as a
+periodic pattern (`zk-pow/src/v1/api/plain_proof.rs::list_to_pattern`) and
+publishes as `MiningConfiguration.rows_pattern` / `cols_pattern`.
 
-Hopper allows 228 KB of shared memory per SM; Ada allows 100 KB per block. The
-production tiling does not fit. Workable Ada candidates:
+So the accumulator's thread layout *is* the definition of what a nonce commits
+to. `miner/miner-base/src/miner_base/settings.py` states the production one
+directly:
 
-    128x128x64 x3 = 48 KB
-    128x128x64 x4 = 64 KB
-    128x64x64  x3 = 36 KB
+    tile_size_m = 128, tile_size_n = 256
+    rows_pattern = [0, 8]
+    cols_pattern = [0, 1, 8, 9, 16, 17, ..., 248, 249]
 
-Smaller K-depth per stage means more mainloop iterations, so the epilogue and
-tile scheduler have to follow the mainloop rather than being ported verbatim.
+Two rows and sixty-four columns per thread — 128 accumulator registers, the
+warpgroup-MMA C layout. Change bM or bN and every thread's row/column set
+changes with it.
 
-## What already works unchanged
+### The Ada tiling that reproduces it exactly
 
-Six kernels use no Hopper constructs at all and need no porting: `blake3`,
-`noise_generation`, `denoise_converter`, `inner_hash`, `tensor_hash`, and
-`build_routing_data`. `kernel_traits.hpp` already loads scales through
-`SM80_CP_ASYNC_CACHEALWAYS`, so there is an existing `cp.async` path in-tree to
-model the TMA replacements on.
+Hopper splits bM=128 across two warpgroups of 64 rows; the 4 warps inside each
+warpgroup then take 16 rows apiece. Ada has no warpgroups, so the same split is
+expressed directly — one `SM80_16x8x32_S32S8S8S32_TN` atom per warp, eight
+warps laid out along M:
 
-## smoke_sm89.cu
+```cpp
+using TiledMma = decltype(make_tiled_mma(
+    SM80_16x8x32_S32S8S8S32_TN{}, Layout<Shape<_8, _1, _1>>{}));
+```
+
+This is not merely similar to the Hopper layout, it is the same map. Hopper
+thread `128g + 32w + l` and Ada thread `32W + l` land on the same rows because
+`64g + 16w == 16(4g + w)`. `layout_equiv_sm89.cu` checks all 256 threads and all
+128 registers of each and finds zero coordinate mismatches, so the transcript,
+the submitted row/column patterns, and the set of valid nonces are unchanged.
+
+The atom's K extent is 32, the same as the warpgroup atom's, which keeps the
+reduction cadence `R / 32` intact.
+
+**bM and bN are therefore fixed at 128 and 256.** Only `bK` and the pipeline
+depth are free.
+
+## Shared memory: the denoise factors are the blocker, not A/B
+
+Ada allows 101376 B per block against Hopper's 233472 B. Measuring the real
+layouts rather than estimating them (`smem_budget_sm89.cu`, which reads them
+straight out of `KernelTraits`) at the production tile and rank 128:
+
+    A+B staging (128x256x128, 3 stages)   144.0 KB
+    C                                      64.0 KB
+    denoise EAL x EARxBpEB                 96.0 KB
+    denoise AxEBL x EBR                    96.0 KB
+    scales                                  1.5 KB
+    -----------------------------------------------
+    total                                 193.6 KB
+
+A/B staging is the part everyone looks at, and it is not the binding
+constraint: `bK=64` with 4 stages costs 96 KB, and dropping to 2 stages at
+`bK=128` costs the same. The binding constraint is the 192 KB of denoise
+factors, which no choice of `bK` touches at all.
+
+That 192 KB is avoidable. `SharedStorageDenoise` holds all four factors at
+once, but `collective_epilogue.hpp::denoise()` consumes them as two strictly
+sequential GEMMs — `EAL x EARxBpEB` completes and releases its pipeline before
+`AxEBL x EBR` is even waited on. Putting the two operand pairs in a union
+instead of a struct costs the overlap between them and halves the requirement
+to 96 KB.
+
+With that regrouping:
+
+    bK=64, 4 stages, two-phase denoise:  99936 B of 101376 B (98.6% used)
+
+It fits, with 1440 B spare. `bK=128` with 2 stages fits identically and leaves
+the k-blocking untouched; `bK=64` is preferred because cp.async has no TMA to
+hide load latency behind, so a deeper pipeline at finer granularity is worth
+more than the larger k-step. Either is safe: `layout_equiv_sm89.cu` also
+simulates `TileHashAccumulator`'s bookkeeping and confirms the transcript
+schedule at `bK=64` and `bK=32` is identical, reduction for reduction, to the
+one at `bK=128`.
+
+One consequence for later: `heuristics.hpp::get_pipeline_stages` adds the C
+buffer on top of the A/B stages, but `SharedStorageDenoise` unions them. On
+Hopper the 64 KB of slack only costs a stage or two; on Ada it is the
+difference between 4 stages and 1, so the heuristic has to learn about the
+union before the denoise path is usable.
+
+## What still has to be ported
+
+| Unit | Hopper constructs | Notes |
+|---|---|---|
+| `collective_mainloop.hpp` | TMA loads, WGMMA, `PipelineTmaAsync` | tiling settled above |
+| `collective_epilogue.hpp` | TMA loads/store, WGMMA denoise | plus the two-phase smem regrouping |
+| `tile_scheduler.hpp` | cluster launch and sync | single CTA on Ada |
+| `lattice_noisingA_kernel.h` | ~95 uses | |
+| `lattice_noisingB_kernel.h` | ~96 uses | |
+| `tensor_hash/merkle_tree_roots_kernel.hpp` | `SM90_TMA_LOAD`, GMMA swizzle atoms | load-only; no MMA to replace |
+
+Five kernels use no Hopper constructs and need no porting: `blake3`,
+`noise_generation`, `denoise_converter`, `inner_hash`, and `build_routing_data`.
+`kernel_traits.hpp` already loads scales through `SM80_CP_ASYNC_CACHEALWAYS`,
+so there is an existing `cp.async` path in-tree to model the TMA replacements
+on.
+
+## Files
+
+### `tiled_mma_sm89.hpp`
+
+The Ada MMA tiling, and why it is not a free choice.
+
+### `layout_equiv_sm89.cu`
+
+Proves the Ada tiling is consensus-equivalent to the Hopper one: identical
+per-thread accumulator coordinates, row/column patterns matching `settings.py`,
+and an unchanged transcript reduction schedule under a smaller `bK`.
+
+cute layouts are compile-time objects, so **this runs on a machine with no GPU**
+and belongs in CI:
+
+    nvcc -std=c++17 -x cu -arch=sm_89 -w --expt-relaxed-constexpr \
+      -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
+      ada/layout_equiv_sm89.cu -o /tmp/layout_equiv && /tmp/layout_equiv
+
+    accumulator layout over a 128x256 tile, 256 MMA threads
+      checked 256 threads x 128 registers, 0 coordinate mismatches
+      thread 0: 128 registers, rows {0,8}, cols {0,1,8,9,...}
+
+    transcript cadence, K=4096 rank=128
+      bK=128 (Hopper): 32 reductions
+      bK= 64 (Ada)   : 32 reductions, schedule identical
+      bK= 32 (Ada)   : 32 reductions, schedule identical
+
+    PASS: the Ada tiling is consensus-equivalent to the Hopper one
+
+### `smem_budget_sm89.cu`
+
+Computes the shared-memory budget from the production `KernelTraits` layouts and
+asserts the proposed Ada regrouping fits in 101376 B. Also no GPU needed, but it
+instantiates the Hopper traits to read their layouts, so it compiles for
+`sm_90a`:
+
+    nvcc -std=c++17 -x cu -arch=sm_90a -w --expt-relaxed-constexpr \
+      -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
+      -I csrc ada/smem_budget_sm89.cu -o /tmp/smem_budget && /tmp/smem_budget
+
+### `smoke_sm89.cu`
 
 Establishes the premise the whole port depends on: that an SM80-class int8
 tensor-core GEMM — the arithmetic the NoisyGEMM mainloop performs — runs
 correctly on Ada. It checks results against a CPU reference, because "it ran"
-and "it is correct" are different claims.
+and "it is correct" are different claims. This one does need the GPU.
+
+Verified on a GeForce RTX 4060 Ti (AD106, sm_89), CUDA 12.6.3, CUTLASS v3.9.2:
+
+    int8 GEMM 512x512x256 on sm_89: checked 182 outputs, 0 mismatched
+    PASS: SM80 int8 tensor-core path is correct on this GPU
 
 Run it:
 
@@ -55,11 +188,6 @@ Run it:
           -I third_party/cutlass/include \
           -I third_party/cutlass/tools/util/include \
           ada/smoke_sm89.cu -o /tmp/smoke && /tmp/smoke'
-
-Verified on a GeForce RTX 4060 Ti (AD106, sm_89), CUDA 12.6.3, CUTLASS v3.9.2:
-
-    int8 GEMM 512x512x256 on sm_89: checked 182 outputs, 0 mismatched
-    PASS: SM80 int8 tensor-core path is correct on this GPU
 
 ## Correctness bar
 
