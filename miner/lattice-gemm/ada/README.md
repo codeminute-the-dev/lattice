@@ -110,6 +110,34 @@ Hopper the 64 KB of slack only costs a stage or two; on Ada it is the
 difference between 4 stages and 1, so the heuristic has to learn about the
 union before the denoise path is usable.
 
+## Registers: 202 of 255, nothing spills
+
+The consensus-fixed accumulator is 128 int32 registers per thread, and that
+number is not negotiable either. Hopper affords it because warpgroup MMA takes
+both operands from shared memory as descriptors and holds no operand registers
+at all. Ada's SM80 atom has to stage A and B through `ldmatrix`, on top of those
+128 — so it is worth knowing whether the mainloop fits before writing it, since
+a spilling int8 GEMM is not a port worth having.
+
+`regpressure_sm89.cu` builds the mainloop's register working set — the full
+accumulator, `ldmatrix` staging of both operands, 32 MMA instructions per
+k-block, and the transcript fold at the production cadence — and lets `ptxas`
+report on it, with the same flags `setup.py` passes:
+
+    Used 202 registers, 0 bytes spill stores, 0 bytes spill loads
+    64 bytes stack frame
+
+It fits. The 64-byte stack frame is the 16-word transcript, indexed by a running
+counter rather than a constant, so it lives in local memory on Hopper too; it is
+touched once per k-tile, not in the inner loop.
+
+At 202 registers x 256 threads Ada runs one CTA per SM, which the 96 KB of
+shared memory would have forced regardless. The production kernel already runs
+that shape — it declares `__launch_bounds__(..., 1)`, and 193.6 KB leaves no
+room for a second CTA in Hopper's 228 KB. So this is the expected operating
+point, not a regression, but there is no register headroom left to spend on
+unrolling the mainloop further.
+
 ## What still has to be ported
 
 | Unit | Hopper constructs | Notes |
@@ -142,7 +170,7 @@ and an unchanged transcript reduction schedule under a smaller `bK`.
 cute layouts are compile-time objects, so **this runs on a machine with no GPU**
 and belongs in CI:
 
-    nvcc -std=c++17 -x cu -arch=sm_89 -w --expt-relaxed-constexpr \
+    nvcc -std=c++20 -x cu -arch=sm_89 -w --expt-relaxed-constexpr \
       -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
       ada/layout_equiv_sm89.cu -o /tmp/layout_equiv && /tmp/layout_equiv
 
@@ -164,9 +192,22 @@ asserts the proposed Ada regrouping fits in 101376 B. Also no GPU needed, but it
 instantiates the Hopper traits to read their layouts, so it compiles for
 `sm_90a`:
 
-    nvcc -std=c++17 -x cu -arch=sm_90a -w --expt-relaxed-constexpr \
+    nvcc -std=c++20 -x cu -arch=sm_90a -w --expt-relaxed-constexpr \
       -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
       -I csrc ada/smem_budget_sm89.cu -o /tmp/smem_budget && /tmp/smem_budget
+
+### `regpressure_sm89.cu`
+
+Measures the mainloop's register and shared-memory footprint. `ptxas` reports
+both at compile time, so this too runs without a GPU — the kernel is only
+compiled, never launched:
+
+    nvcc -std=c++20 -x cu -arch=sm_89 -O3 -w --expt-relaxed-constexpr \
+      --expt-extended-lambda --use_fast_math -DNDEBUG \
+      -DCUTLASS_DEBUG_TRACE_LEVEL=0 \
+      --ptxas-options=--verbose,--register-usage-level=10,--warn-on-local-memory-usage \
+      -I third_party/cutlass/include -I csrc \
+      -c ada/regpressure_sm89.cu -o /dev/null
 
 ### `smoke_sm89.cu`
 
