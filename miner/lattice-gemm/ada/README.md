@@ -149,10 +149,11 @@ The GEMM path is written and compiles for sm_89 with no spills:
 | `tile_scheduler.hpp` (`SingleTileScheduler`) | `tile_scheduler_sm89.hpp` |
 | `lattice_gemm_kernel.h` + `lattice_gemm_host.h` | `lattice_gemm_sm89.h` |
 | `lattice_noisingA_kernel.h` + `lattice_noisingB_kernel.h` | `noising_kernel_sm89.hpp` |
+| `tensor_hash/merkle_tree_roots_kernel.hpp` | `merkle_tree_roots_sm89.hpp` |
 
 The assembled GEMM uses 252 registers of 255 and 100352 B of shared memory of
-the 101376 available; the noising kernel 141 registers and 73728 B. Nothing
-spills.
+the 101376 available; the noising kernel 141 registers and 73728 B; the
+Merkle-roots kernel 72 registers. Nothing spills.
 
 Three things came out differently from a literal translation:
 
@@ -194,6 +195,23 @@ then added in int8, which wraps. With 7-bit inputs at rank 128 the sum really
 does leave int8's range, so a port that saturated both or wrapped both would be
 wrong on real data.
 
+**The Merkle-roots kernel loses its dual-pipeline mode.** One thread hashes one
+1 KiB chunk, so a warp wants 32 chunks 1 KiB apart -- an access pattern that
+reads terribly from global memory, which is why the Hopper kernel stages it
+through shared memory with TMA. cp.async solves the same problem without a
+producer warpgroup: the threads cooperatively load a contiguous slab covering
+everyone's current slice into the same layout. The dual-pipeline mode existed
+only because a TMA descriptor dimension cannot exceed 256, so 512 consumers
+needed two descriptors, two pipelines and a second copy of the consumer loop;
+cp.async has no such limit, and it collapses back to one.
+
+That kernel's shared-memory budget does not survive the move, though. Its
+Hopper default -- 256 threads staging 128-byte slices three deep -- wants
+106496 B, and Ada allows 101376. Two stages at 128 bytes, or four at 64, fit;
+512 threads fit only at 64 bytes and two stages. A `static_assert` rejects the
+combinations that do not, so the host's runtime dispatch over stage counts has
+to be narrowed on Ada rather than discovering this at launch.
+
 ### Alignment: cp.async is stricter than TMA
 
 TMA takes its bounds from a descriptor and copes with any stride. cp.async and
@@ -210,14 +228,17 @@ that are constrained:
 `run_lattice_gemm_sm89` rejects a problem that violates these rather than
 issuing a misaligned access.
 
-## What still has to be ported
+## What is left
 
-| Unit | Hopper constructs | Notes |
-|---|---|---|
-| `tensor_hash/merkle_tree_roots_kernel.hpp` | `SM90_TMA_LOAD`, `PipelineTmaAsync` | load-only; no MMA to replace |
-| `lattice_gemm_api.cpp` | — | nothing dispatches to the Ada kernels yet |
-| `heuristics.hpp::get_pipeline_stages` | — | adds C on top of the A/B stages, but `SharedStorageDenoise` unions them; on Ada that is the difference between 4 stages and 1 |
-| `setup.py` | — | `COMPUTE_CAPABILITY` is hardcoded to `sm_90a` |
+Every kernel is ported. What remains is build and dispatch work -- nothing on
+Ada reaches these kernels yet:
+
+| Unit | Notes |
+|---|---|
+| `lattice_gemm_api.cpp` | nothing dispatches to the Ada kernels yet |
+| `tensor_hash_host.hpp` | its stage-count dispatch offers combinations that do not fit Ada |
+| `heuristics.hpp::get_pipeline_stages` | adds C on top of the A/B stages, but `SharedStorageDenoise` unions them; on Ada that is the difference between 4 stages and 1 |
+| `setup.py` | `COMPUTE_CAPABILITY` is hardcoded to `sm_90a` |
 
 Five kernels use no Hopper constructs and need no porting: `blake3`,
 `noise_generation`, `denoise_converter`, `inner_hash`, and `build_routing_data`.
@@ -292,6 +313,20 @@ split-K reduction, and M and K left indivisible by the tile.
       --expt-extended-lambda -DNDEBUG \
       -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
       -I csrc -I ada ada/noising_sm89_test.cu -o /tmp/noising_test && /tmp/noising_test
+
+### `merkle_tree_roots_sm89.hpp`, `merkle_tree_roots_sm89_test.cu`
+
+The Merkle-roots kernel and its test. Only the load path changed, so the test's
+reference is a naive kernel with the same structure and no staging at all --
+each thread reads its own chunk straight from global memory and hashes it with
+the same primitives and the same reduction. Comparing the two isolates what was
+ported: whether the staged, swizzled tile presents each thread with the bytes it
+would have read itself. **Needs the GPU.**
+
+    nvcc -std=c++20 -arch=sm_89 -O3 -w --expt-relaxed-constexpr \
+      --expt-extended-lambda -DNDEBUG \
+      -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
+      -I csrc -I ada ada/merkle_tree_roots_sm89_test.cu -o /tmp/mt_test && /tmp/mt_test
 
 ### `noisy_gemm_sm89_test.cu`
 
