@@ -148,9 +148,11 @@ The GEMM path is written and compiles for sm_89 with no spills:
 | `collective_epilogue.hpp` | `collective_epilogue_sm89.hpp` |
 | `tile_scheduler.hpp` (`SingleTileScheduler`) | `tile_scheduler_sm89.hpp` |
 | `lattice_gemm_kernel.h` + `lattice_gemm_host.h` | `lattice_gemm_sm89.h` |
+| `lattice_noisingA_kernel.h` + `lattice_noisingB_kernel.h` | `noising_kernel_sm89.hpp` |
 
-The assembled kernel uses 252 registers of 255 and 100352 B of shared memory of
-the 101376 available, with no spills.
+The assembled GEMM uses 252 registers of 255 and 100352 B of shared memory of
+the 101376 available; the noising kernel 141 registers and 73728 B. Nothing
+spills.
 
 Three things came out differently from a literal translation:
 
@@ -172,6 +174,26 @@ whole fragment to bfloat16 before its stmatrix, which means holding 128 floats
 and 128 bfloat16s at once. stmatrix is sm_90 anyway, so the Ada epilogue writes
 each element into shared memory as it scales it, and saves the 64 registers.
 
+**One noising kernel, not two.** `lattice_noisingA_kernel.h` and
+`lattice_noisingB_kernel.h` are the same kernel written twice under different
+names: A -> B, EAL -> EBR, EAR -> EBL, EBL -> EAR, ApEA -> BpEB,
+AxEBL -> EARxBpEB. Each produces a noised matrix and a rank-R denoise factor,
+and the one substantive difference is which matrix the factor multiplies --
+noisingA the raw input, noisingB the output it has just noised. That is a
+template parameter here.
+
+Those kernels are warp-specialised three ways, with a pipeline whose job is to
+carry BpEB from the warpgroup that produces it to the warpgroup that multiplies
+it. Serialising the two consumers turns that dependency into a barrier, and
+cp.async removes the producer warpgroup, so four pipelines become none.
+Split-K's `SM90_TMA_REDUCE_ADD` becomes `atomicAdd`.
+
+Two conversions there are easy to get wrong because they differ: the noise term
+saturates on the way down from int32 (`cvt.pack.sat.s8.s32`), and the input is
+then added in int8, which wraps. With 7-bit inputs at rank 128 the sum really
+does leave int8's range, so a port that saturated both or wrapped both would be
+wrong on real data.
+
 ### Alignment: cp.async is stricter than TMA
 
 TMA takes its bounds from a descriptor and copes with any stride. cp.async and
@@ -192,9 +214,8 @@ issuing a misaligned access.
 
 | Unit | Hopper constructs | Notes |
 |---|---|---|
-| `lattice_noisingA_kernel.h` | ~95 uses | |
-| `lattice_noisingB_kernel.h` | ~96 uses | |
-| `tensor_hash/merkle_tree_roots_kernel.hpp` | `SM90_TMA_LOAD`, GMMA swizzle atoms | load-only; no MMA to replace |
+| `tensor_hash/merkle_tree_roots_kernel.hpp` | `SM90_TMA_LOAD`, `PipelineTmaAsync` | load-only; no MMA to replace |
+| `lattice_gemm_api.cpp` | — | nothing dispatches to the Ada kernels yet |
 | `heuristics.hpp::get_pipeline_stages` | — | adds C on top of the A/B stages, but `SharedStorageDenoise` unions them; on Ada that is the difference between 4 stages and 1 |
 | `setup.py` | — | `COMPUTE_CAPABILITY` is hardcoded to `sm_90a` |
 
@@ -254,6 +275,23 @@ instantiates the Hopper traits to read their layouts, so it compiles for
 
 The port itself. `lattice_gemm_sm89.h` carries both the kernel and a launcher
 that takes plain pointers, so it can be driven without torch.
+
+### `noising_kernel_sm89.hpp`
+
+Both noising kernels, parameterised by which matrix the rank-R product
+multiplies, with a launcher. When the split-K reduction is in use the factor is
+accumulated with `atomicAdd`, so its buffer has to be zeroed beforehand -- the
+same requirement TMA's reduce-add had.
+
+### `noising_sm89_test.cu`
+
+Correctness against a CPU reference — **needs the GPU**. Covers both roles, the
+split-K reduction, and M and K left indivisible by the tile.
+
+    nvcc -std=c++20 -arch=sm_89 -O3 -w --expt-relaxed-constexpr \
+      --expt-extended-lambda -DNDEBUG \
+      -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
+      -I csrc -I ada ada/noising_sm89_test.cu -o /tmp/noising_test && /tmp/noising_test
 
 ### `noisy_gemm_sm89_test.cu`
 
