@@ -138,22 +138,76 @@ room for a second CTA in Hopper's 228 KB. So this is the expected operating
 point, not a regression, but there is no register headroom left to spend on
 unrolling the mainloop further.
 
+## What is ported
+
+The GEMM path is written and compiles for sm_89 with no spills:
+
+| Hopper | Ada |
+|---|---|
+| `collective_mainloop.hpp` | `collective_mainloop_sm89.hpp` |
+| `collective_epilogue.hpp` | `collective_epilogue_sm89.hpp` |
+| `tile_scheduler.hpp` (`SingleTileScheduler`) | `tile_scheduler_sm89.hpp` |
+| `lattice_gemm_kernel.h` + `lattice_gemm_host.h` | `lattice_gemm_sm89.h` |
+
+The assembled kernel uses 252 registers of 255 and 100352 B of shared memory of
+the 101376 available, with no spills.
+
+Three things came out differently from a literal translation:
+
+**No warp specialisation.** Hopper dedicates a warpgroup to issuing TMA and two
+more to MMA, with three mbarrier pipelines between them. cp.async has no such
+asymmetry — every thread loads for itself — so the CTA is exactly the 256 MMA
+threads and the pipeline is the ordinary SM80 multistage one. Most of the
+Hopper kernel's length is warp specialisation, and it disappears rather than
+being ported.
+
+**The denoise k-loop is deliberately not unrolled.** Each iteration's B fragment
+is 64 registers, so an eight-deep unroll keeps 512 of them live next to a
+128-register accumulator. That spilled 780 bytes; not unrolling it, and slicing
+the k-block out of shared memory before building the fragments rather than
+after, brings it to zero.
+
+**Scale, convert and stage are one pass.** The Hopper epilogue converts the
+whole fragment to bfloat16 before its stmatrix, which means holding 128 floats
+and 128 bfloat16s at once. stmatrix is sm_90 anyway, so the Ada epilogue writes
+each element into shared memory as it scales it, and saves the 64 registers.
+
+### Alignment: cp.async is stricter than TMA
+
+TMA takes its bounds from a descriptor and copes with any stride. cp.async and
+the vector store do not — a 16-byte access must be 16-byte aligned — so each row
+of A, B, C and the denoise factors has to start on a 16-byte boundary. Row
+*counts* are still free, since M and N are predicated and the ZFILL variant of
+cp.async writes zeros past the end exactly as TMA would; it is the row pitches
+that are constrained:
+
+    K % 16 == 0     (int8 A and B)
+    N % 8  == 0     (bfloat16 C)
+    R % 8  == 0     (fp16 denoise factors)
+
+`run_lattice_gemm_sm89` rejects a problem that violates these rather than
+issuing a misaligned access.
+
 ## What still has to be ported
 
 | Unit | Hopper constructs | Notes |
 |---|---|---|
-| `collective_mainloop.hpp` | TMA loads, WGMMA, `PipelineTmaAsync` | tiling settled above |
-| `collective_epilogue.hpp` | TMA loads/store, WGMMA denoise | plus the two-phase smem regrouping |
-| `tile_scheduler.hpp` | cluster launch and sync | single CTA on Ada |
 | `lattice_noisingA_kernel.h` | ~95 uses | |
 | `lattice_noisingB_kernel.h` | ~96 uses | |
 | `tensor_hash/merkle_tree_roots_kernel.hpp` | `SM90_TMA_LOAD`, GMMA swizzle atoms | load-only; no MMA to replace |
+| `heuristics.hpp::get_pipeline_stages` | — | adds C on top of the A/B stages, but `SharedStorageDenoise` unions them; on Ada that is the difference between 4 stages and 1 |
+| `setup.py` | — | `COMPUTE_CAPABILITY` is hardcoded to `sm_90a` |
 
 Five kernels use no Hopper constructs and need no porting: `blake3`,
 `noise_generation`, `denoise_converter`, `inner_hash`, and `build_routing_data`.
-`kernel_traits.hpp` already loads scales through `SM80_CP_ASYNC_CACHEALWAYS`,
-so there is an existing `cp.async` path in-tree to model the TMA replacements
-on.
+
+One shared file changed. `TileHashAccumulator::accumulate` in
+`../csrc/gemm/pow_utils.hpp` called `warpgroup_wait<0>()` before reading the
+accumulator, which is right for asynchronous warpgroup MMA and a compile error
+off sm_90a. It is now guarded by `CUTE_ARCH_MMA_SM90A_ENABLED`, so the Ada
+mainloop reuses the accumulator rather than keeping a second copy of
+consensus-critical arithmetic. The Hopper kernel still builds unchanged
+(168 registers, no spills).
 
 ## Files
 
@@ -195,6 +249,29 @@ instantiates the Hopper traits to read their layouts, so it compiles for
     nvcc -std=c++20 -x cu -arch=sm_90a -w --expt-relaxed-constexpr \
       -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
       -I csrc ada/smem_budget_sm89.cu -o /tmp/smem_budget && /tmp/smem_budget
+
+### `kernel_traits_sm89.hpp`, `collective_mainloop_sm89.hpp`, `collective_epilogue_sm89.hpp`, `tile_scheduler_sm89.hpp`, `lattice_gemm_sm89.h`
+
+The port itself. `lattice_gemm_sm89.h` carries both the kernel and a launcher
+that takes plain pointers, so it can be driven without torch.
+
+### `noisy_gemm_sm89_test.cu`
+
+End-to-end correctness against CPU references — **needs the GPU**. Checks the
+output tile with the tile exactly covering the problem, with several tiles, and
+with M, N and K all leaving remainders, which is what exercises the predication
+that replaced TMA's bounds handling.
+
+It also checks the transcript, which the output tile does not cover: the CPU
+replays `TileHashAccumulator`'s fold for all 256 threads, the repository's own
+BLAKE3 compresses the results, and the PoW target is set to the smallest hash so
+exactly one thread can win it. If the kernel's transcripts differ from the
+reference by a bit, either the wrong thread wins or none does.
+
+    nvcc -std=c++20 -arch=sm_89 -O3 -w --expt-relaxed-constexpr \
+      --expt-extended-lambda -DNDEBUG \
+      -I third_party/cutlass/include -I third_party/cutlass/tools/util/include \
+      -I csrc -I ada ada/noisy_gemm_sm89_test.cu -o /tmp/ada_test && /tmp/ada_test
 
 ### `regpressure_sm89.cu`
 
