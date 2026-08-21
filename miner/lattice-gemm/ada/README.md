@@ -11,9 +11,21 @@ merely compiled for it; they are built on hardware that only Hopper has:
 | `cutlass::PipelineTmaAsync` | — | `cutlass::PipelineAsync` |
 | `SM90_TMA_REDUCE_ADD` | — | `atomicAdd` or a separate pass |
 
-TMA is a physical unit introduced in Hopper. Ada (sm_89) does not have it, so
-recompiling with a different `-gencode` moves the failure from link time to
-compile time rather than fixing anything.
+TMA is a physical unit introduced in Hopper. Ada (sm_89) does not have it.
+
+It is worth being precise about what happens if you just rebuild for sm_89,
+because the answer is not what it looks like: **it compiles.** Every one of
+those sources builds clean under `-arch=sm_89`, with or without `-DNDEBUG`.
+cute guards its Hopper-only paths with `CUTE_INVALID_CONTROL_PATH`, which is a
+runtime `assert(0)` plus a `printf` -- not a compile-time error -- and the
+project builds with `-DNDEBUG`, which compiles the assert out and leaves only
+the printf. On top of that `make_tma_copy` builds its descriptor on the host
+through `cuTensorMapEncodeTiled`, which fails on a non-Hopper device, and the
+cluster launch fails too.
+
+So a successful build for sm_89 tells you nothing. This is the failure mode the
+correctness bar at the bottom of this file is about: not an error, just wrong
+answers.
 
 ## The constraint that shapes everything: the tile is consensus-visible
 
@@ -244,12 +256,39 @@ Five kernels use no Hopper constructs and need no porting: `blake3`,
 `noise_generation`, `denoise_converter`, `inner_hash`, and `build_routing_data`.
 
 One shared file changed. `TileHashAccumulator::accumulate` in
-`../csrc/gemm/pow_utils.hpp` called `warpgroup_wait<0>()` before reading the
-accumulator, which is right for asynchronous warpgroup MMA and a compile error
-off sm_90a. It is now guarded by `CUTE_ARCH_MMA_SM90A_ENABLED`, so the Ada
-mainloop reuses the accumulator rather than keeping a second copy of
-consensus-critical arithmetic. The Hopper kernel still builds unchanged
-(168 registers, no spills).
+`../csrc/gemm/pow_utils.hpp` waited on warpgroup MMA before reading the
+accumulator, which is right for Hopper and meaningless for Ada's synchronous
+atom. Off sm_90a that call is not an error, which is the problem: it becomes
+`assert(0)` plus a `printf`, and under `-DNDEBUG` just the `printf` -- executed
+once per transcript reduction, in the innermost loop of the miner. It is now
+guarded by `CUTE_ARCH_MMA_SM90A_ENABLED`, so the Ada mainloop can reuse the
+accumulator rather than keeping a second copy of consensus-critical arithmetic.
+The Hopper kernel still builds unchanged (168 registers, no spills).
+
+## Running the checks
+
+`ada/run_checks.sh` builds and runs all of them. The two host checks need only
+nvcc; the three device checks are built either way and run when a card is
+present, which is worth doing on a machine without one -- register pressure and
+shared-memory footprint are compile-time facts, and both are tight on Ada.
+
+    git submodule update --init --depth 1 third_party/cutlass
+    ./ada/run_checks.sh
+
+    host checks
+    layout_equiv               PASS
+    smem_budget                PASS
+
+    device checks
+    noisy_gemm                 built, skipped (no GPU)
+    noising                    built, skipped (no GPU)
+    merkle_roots               built, skipped (no GPU)
+
+    mainloop register pressure (compile-time; Ada allows 255)
+      Used 202 registers, 0 bytes spill stores
+
+Each file's own header carries the standalone nvcc line if you want to run one
+on its own.
 
 ## Files
 

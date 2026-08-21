@@ -171,8 +171,10 @@ struct TileHashAccumulator {
 #if defined(CUTE_ARCH_MMA_SM90A_ENABLED)
       // Warpgroup MMA is asynchronous, so the accumulator is only readable once
       // the outstanding MMAs have retired. The SM80 atom the Ada backend uses is
-      // synchronous and needs no wait -- and cute's warpgroup_wait is a compile
-      // error off sm_90a, so it cannot simply be left in.
+      // synchronous and needs no wait. Leaving the call in is not a build error
+      // off sm_90a -- cute turns it into assert(0) plus a printf, and -DNDEBUG
+      // leaves only the printf -- which would run once per reduction in the
+      // miner's innermost loop.
       warpgroup_wait<0>();
 #endif
       warpgroup_fence_operand(tensor);
