@@ -162,11 +162,11 @@ Deployment notes, including systemd units, are in [`deploy/`](deploy/).
 
 ## Status
 
-**Alpha, version 0.1.0.** Mainnet is live and being mined by the GPU miner; the
-current height and supply are always at the endpoint above. Every node and miner
-on the network is still operated by the project itself, and the DNS seeds do not
-resolve yet. Run it on simnet or testnet and dogfood it; do not treat LATT as
-having value.
+**Alpha, version 0.1.0.** Mainnet has been mined by the project's own GPU miner,
+but mining is currently paused and the chain is idle; the live height, supply and
+latest block are at the endpoint above. Every node and miner that has existed is
+operated by the project itself, and the DNS seeds do not resolve yet. Run it on
+simnet or testnet and dogfood it; do not treat LATT as having value.
 
 ## License
 
