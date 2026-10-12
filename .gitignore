@@ -202,3 +202,4 @@ miner/lattice-gemm/csrc/gemm/instantiations/
 miner/lattice-gemm/csrc/gemm/static_switch_matmul.h
 miner/lattice-gemm/csrc/gemm/static_switch_noisingA.h
 miner/lattice-gemm/csrc/gemm/static_switch_noisingB.h
+miner/lattice-gemm/ada/liblattice_ada.so
