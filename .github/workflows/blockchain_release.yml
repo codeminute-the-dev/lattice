@@ -57,7 +57,6 @@ jobs:
   release:
     needs: version
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       contents: write
       actions: read
@@ -113,7 +112,7 @@ jobs:
           generate_release_notes: true
           files: dist/*
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
   # Promote the image built by blockchain_build.yml for this commit (tagged
   # sha-<commit>) to the official :vX.Y.Z + :latest tags by re-tagging the
@@ -121,7 +120,6 @@ jobs:
   docker-promote:
     needs: version
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       contents: read
       packages: write
