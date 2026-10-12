@@ -162,11 +162,11 @@ Deployment notes, including systemd units, are in [`deploy/`](deploy/).
 
 ## Status
 
-**Alpha, version 0.1.0.** One mainnet node is running — the one behind the
-endpoint above — but the chain is at height 0: mainnet sets
-`GenerateSupported: false`, so blocks need the GPU miner and nobody has pointed
-one at it yet. There are no other peers and the DNS seeds do not resolve. Run it
-on simnet or testnet and dogfood it; do not treat LATT as having value.
+**Alpha, version 0.1.0.** Mainnet is live and being mined by the GPU miner; the
+current height and supply are always at the endpoint above. Every node and miner
+on the network is still operated by the project itself, and the DNS seeds do not
+resolve yet. Run it on simnet or testnet and dogfood it; do not treat LATT as
+having value.
 
 ## License
 
