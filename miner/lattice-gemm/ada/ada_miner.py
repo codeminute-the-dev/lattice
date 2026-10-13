@@ -61,6 +61,7 @@ def attempt(job: MiningJob, A: torch.Tensor, Bt: torch.Tensor, config: int | Non
         root_b,
         key,
         salted_dims=(m, n) if job.cert_version.uses_salted_seeds else None,
+        lattice_salts=job.cert_version.uses_lattice_salts,
     )
 
     A_noised, Bt_noised = lattice_ada.noise_operands(

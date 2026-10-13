@@ -22,10 +22,16 @@ class CertificateVersion(IntEnum):
     ZK_DENSE = 1  # V1: dense (non-MoE) proofs only.
     ZK_MOE = 2  # V2: MoE and dense proofs.
     ZK_V3 = 3  # V3: V2 layout with the salted noise-seed derivation.
+    ZK_V4 = 4  # V4: V3 layout, salted under Lattice's own seed domain.
 
     @property
     def uses_salted_seeds(self) -> bool:
         return self >= CertificateVersion.ZK_V3
+
+    @property
+    def uses_lattice_salts(self) -> bool:
+        """True from V4: the seed salts are Lattice's, not Pearl's."""
+        return self >= CertificateVersion.ZK_V4
 
 
 _DENSE_DTYPE = np.dtype(
@@ -70,7 +76,7 @@ class ZKCertificate:
 
         ZK_DENSE (v1): Version(4) | HeaderHash(32) | PublicData(164) | ProofDataLen(4) | ProofData
         ZK_MOE   (v2): Version(4) | HeaderHash(32) | PublicDataLen(4) | PublicData(N) | ProofDataLen(4) | ProofData
-        ZK_V3 (v3): same layout as v2 (only the noise-seed derivation differs).
+        ZK_V3 (v3), ZK_V4 (v4): same layout as v2 (only the noise-seed derivation differs).
         """
         public_data = bytes(self.proof.public_data)
         proof = bytes(self.proof.proof_data)
@@ -109,7 +115,11 @@ class ZKCertificate:
             public_data = bytes(arr["public_data"])
             proof_data_len = int(arr["proof_data_len"])
             proof_data = data[_DENSE_DTYPE.itemsize : _DENSE_DTYPE.itemsize + proof_data_len]
-        elif cert_version in (CertificateVersion.ZK_MOE, CertificateVersion.ZK_V3):
+        elif cert_version in (
+            CertificateVersion.ZK_MOE,
+            CertificateVersion.ZK_V3,
+            CertificateVersion.ZK_V4,
+        ):
             arr = np.frombuffer(data, dtype=_MOE_PREAMBLE_DTYPE, count=1)[0]
             header_hash = bytes(arr["header_hash"])
             pd_len = int(arr["public_data_len"])

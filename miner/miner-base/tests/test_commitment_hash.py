@@ -197,3 +197,41 @@ class TestSaltedSeedDerivation:
             **moe_roots,
         )
         assert prebound == salted
+
+
+class TestLatticeSalts:
+    """V4 (Lattice) salts versus V3 (Pearl) salts."""
+
+    ROOT_A = bytes(range(32))
+    ROOT_B = bytes(range(32, 64))
+    KEY = bytes(range(64, 96))
+
+    def test_v4_differs_from_v3(self):
+        v3 = CommitmentHasher.commitment_hash_from_merkle_roots(
+            self.ROOT_A, self.ROOT_B, self.KEY, salted_dims=(256, 512)
+        )
+        v4 = CommitmentHasher.commitment_hash_from_merkle_roots(
+            self.ROOT_A, self.ROOT_B, self.KEY, salted_dims=(256, 512), lattice_salts=True
+        )
+        assert v3 != v4
+        assert v4.noise_seed_A != v3.noise_seed_A
+        assert v4.noise_seed_B != v3.noise_seed_B
+
+    def test_v4_is_deterministic_and_binds_dims(self):
+        a = CommitmentHasher.commitment_hash_from_merkle_roots(
+            self.ROOT_A, self.ROOT_B, self.KEY, salted_dims=(256, 512), lattice_salts=True
+        )
+        b = CommitmentHasher.commitment_hash_from_merkle_roots(
+            self.ROOT_A, self.ROOT_B, self.KEY, salted_dims=(256, 512), lattice_salts=True
+        )
+        c = CommitmentHasher.commitment_hash_from_merkle_roots(
+            self.ROOT_A, self.ROOT_B, self.KEY, salted_dims=(256, 1024), lattice_salts=True
+        )
+        assert a == b
+        assert a != c
+
+    def test_lattice_salts_need_salted_dims(self):
+        with pytest.raises(ValueError):
+            CommitmentHasher.commitment_hash_from_merkle_roots(
+                self.ROOT_A, self.ROOT_B, self.KEY, salted_dims=None, lattice_salts=True
+            )

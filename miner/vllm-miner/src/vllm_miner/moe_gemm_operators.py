@@ -150,6 +150,12 @@ def prepare_moe_noising(
     A_hash = _hash_2d(A_q.contiguous().view(torch.uint8), key_tensor, device)
     B_hash = _hash_2d(B_stacked.contiguous().view(torch.uint8), key_tensor, device)
 
+    if mining_job.cert_version.uses_lattice_salts:
+        # The Hopper kernel hardcodes Pearl's V3 salts (csrc/tensor_hash/
+        # commitment_hash_from_merkle_roots_kernel.hpp); a V4 proof built with
+        # them would be rejected, so refuse instead of mining invalid blocks.
+        raise NotImplementedError("the Hopper kernel path does not support certificate V4 yet")
+
     # V3 (salted) mining: the kernel salts the raw roots before the routing
     # fold. The proof's ``n`` is the per-expert intermediate dimension.
     salted_dims = (

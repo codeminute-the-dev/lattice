@@ -41,7 +41,7 @@ def mine(cert_version, nbits, target, m=256, n=256, k=2048, tries=200):
     return job, h, None, tries
 
 
-@pytest.mark.parametrize("cert", [CertificateVersion.ZK_V3])
+@pytest.mark.parametrize("cert", [CertificateVersion.ZK_V3, CertificateVersion.ZK_V4])
 def test_verifier_accepts_gpu_proof(cert):
     nbits, target = EASY_NBITS, EASY_TARGET
     job, h, hit, tries = mine(cert, nbits, target, m=512, n=512)
@@ -51,9 +51,9 @@ def test_verifier_accepts_gpu_proof(cert):
     assert ok, msg
 
 
-def _mined():
+def _mined(cert=CertificateVersion.ZK_V3):
     nbits, target = EASY_NBITS, EASY_TARGET
-    job, h, hit, _ = mine(CertificateVersion.ZK_V3, nbits, target, m=512, n=512)
+    job, h, hit, _ = mine(cert, nbits, target, m=512, n=512)
     assert hit is not None
     return job, h, ada_miner.make_proof(job, hit), nbits
 
@@ -82,4 +82,17 @@ def test_verifier_rejects_much_harder_target():
 def test_verifier_rejects_unsalted_derivation():
     job, h, proof, nbits = _mined()
     ok, _ = verify_plain_proof_for_cert_version(int(CertificateVersion.ZK_MOE), h, proof, nbits)
+    assert not ok
+
+
+def test_v3_proof_rejected_under_v4_rules():
+    # After LatticeSeedForkHeight a proof built with Pearl's salts must not pass.
+    job, h, proof, nbits = _mined(CertificateVersion.ZK_V3)
+    ok, _ = verify_plain_proof_for_cert_version(int(CertificateVersion.ZK_V4), h, proof, nbits)
+    assert not ok
+
+
+def test_v4_proof_rejected_under_v3_rules():
+    job, h, proof, nbits = _mined(CertificateVersion.ZK_V4)
+    ok, _ = verify_plain_proof_for_cert_version(int(CertificateVersion.ZK_V3), h, proof, nbits)
     assert not ok

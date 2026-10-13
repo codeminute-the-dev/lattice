@@ -137,6 +137,12 @@ def lattice_gemm_noisy(
         tensor_hash_scratchpad,
     )
 
+    if mining_job.cert_version.uses_lattice_salts:
+        # The Hopper kernel hardcodes Pearl's V3 salts (csrc/tensor_hash/
+        # commitment_hash_from_merkle_roots_kernel.hpp); a V4 proof built with
+        # them would be rejected, so refuse instead of mining invalid blocks.
+        raise NotImplementedError("the Hopper kernel path does not support certificate V4 yet")
+
     # Generate commitment hashes for noise generation.
     commitment_hash_A_tensor = torch.empty(32, device="cuda", dtype=torch.uint8)
     commitment_hash_B_tensor = torch.empty(32, device="cuda", dtype=torch.uint8)

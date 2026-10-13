@@ -24,14 +24,17 @@ def _bind_root(merkle_root: bytes, dim: int, salt: bytes) -> bytes:
     return blake3(merkle_root + dim.to_bytes(4, "little") + _BIND_PAD, key=salt).digest()
 
 
-def bind_root_a(a_merkle_root: bytes, m: int) -> bytes:
-    """V3 salting of A's Merkle root; commits the row count ``m``."""
-    return _bind_root(a_merkle_root, m, SEED_SALT_A)
+def bind_root_a(a_merkle_root: bytes, m: int, *, lattice_salts: bool = False) -> bytes:
+    """Salting of A's Merkle root; commits the row count ``m``.
+
+    Pearl's salts (V3) by default, Lattice's (V4) with ``lattice_salts``.
+    """
+    return _bind_root(a_merkle_root, m, LATTICE_SEED_SALT_A if lattice_salts else SEED_SALT_A)
 
 
-def bind_root_b(b_merkle_root: bytes, n: int) -> bytes:
-    """V3 salting of B's Merkle root; commits the column count ``n``."""
-    return _bind_root(b_merkle_root, n, SEED_SALT_B)
+def bind_root_b(b_merkle_root: bytes, n: int, *, lattice_salts: bool = False) -> bytes:
+    """Salting of B's Merkle root; commits the column count ``n``."""
+    return _bind_root(b_merkle_root, n, LATTICE_SEED_SALT_B if lattice_salts else SEED_SALT_B)
 
 
 class CommitmentHasher:
@@ -52,6 +55,7 @@ class CommitmentHasher:
         mining_config: MiningConfiguration,
         *,
         salted_dims: tuple[int, int] | None,
+        lattice_salts: bool = False,
     ) -> CommitmentHash:
         key = cls.get_key(incomplete_header_bytes, mining_config)
         merkle_tree_A = MatrixMerkleTree(A, key)
@@ -60,7 +64,11 @@ class CommitmentHasher:
         merkle_tree_B = MatrixMerkleTree(B.T, key)
 
         return cls.commitment_hash_from_merkle_roots(
-            merkle_tree_A.root, merkle_tree_B.root, key, salted_dims=salted_dims
+            merkle_tree_A.root,
+            merkle_tree_B.root,
+            key,
+            salted_dims=salted_dims,
+            lattice_salts=lattice_salts,
         )
 
     @staticmethod
@@ -93,14 +101,18 @@ class CommitmentHasher:
         routing_root: bytes | None = None,
         offsets_root: bytes | None = None,
         salted_dims: tuple[int, int] | None,
+        lattice_salts: bool = False,
     ) -> CommitmentHash:
         # salted_dims has no default so callers must choose a derivation explicitly:
-        # (m, n) for V3 salted seeds, None for the legacy (V1/V2) chain.
-        # V3 (salted) derivation: salt each root before the MoE routing fold.
+        # (m, n) for V3/V4 salted seeds, None for the legacy (V1/V2) chain.
+        # lattice_salts selects the V4 (Lattice) salts instead of V3's (Pearl's).
+        # Salted derivation: salt each root before the MoE routing fold.
+        if lattice_salts and salted_dims is None:
+            raise ValueError("lattice_salts needs salted_dims")
         if salted_dims is not None:
             m, n = salted_dims
-            A_merkle_root = bind_root_a(A_merkle_root, m)
-            B_merkle_root = bind_root_b(B_merkle_root, n)
+            A_merkle_root = bind_root_a(A_merkle_root, m, lattice_salts=lattice_salts)
+            B_merkle_root = bind_root_b(B_merkle_root, n, lattice_salts=lattice_salts)
 
         moe_args = (routing_root, offsets_root)
         if any(arg is not None for arg in moe_args):
