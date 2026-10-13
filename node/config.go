@@ -106,6 +106,7 @@ type config struct {
 	BlockMaxVsize            uint32        `long:"blockmaxvsize" description:"Maximum block vsize to be used when creating a block"`
 	BlockMinVsize            uint32        `long:"blockminvsize" description:"Minimum block vsize to be used when creating a block"`
 	BlocksOnly               bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
+	AllowStaleTemplates      bool          `long:"allowstaletemplates" description:"Serve getblocktemplate even when the best block is more than 24 hours old. Local RPC behavior only, not consensus: lets a stalled chain be restarted by a miner."`
 	ConfigFile               string        `short:"C" long:"configfile" description:"Path to configuration file"`
 	ConnectPeers             []string      `long:"connect" description:"Connect only to the specified peers at startup"`
 	CPUProfile               string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`

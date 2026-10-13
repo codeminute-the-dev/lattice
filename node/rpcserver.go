@@ -1987,7 +1987,8 @@ func handleGetBlockTemplateRequest(s *rpcServer, request *btcjson.TemplateReques
 
 	// No point in generating or accepting work before the chain is synced.
 	currentHeight := s.cfg.Chain.BestSnapshot().Height
-	if currentHeight != 0 && !s.cfg.Chain.IsCurrent() {
+	if currentHeight != 0 && !cfg.AllowStaleTemplates &&
+		!s.cfg.Chain.IsCurrent() {
 		return nil, &btcjson.RPCError{
 			Code:    btcjson.ErrRPCClientInInitialDownload,
 			Message: "Lattice is downloading blocks...",
