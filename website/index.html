@@ -695,6 +695,8 @@ cd lattice &amp;&amp; task build:blockchain</pre>
       Simnet uses a 200-block epoch so a full reset takes minutes instead of years.
       Step-by-step guide:
       <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/solo-mining.md">docs/solo-mining.md</a>.
+      To mine on a GPU (GTX 10xx and newer):
+      <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/gpu-mining.md">docs/gpu-mining.md</a>.
     </p>
   </section>
 
@@ -758,9 +760,9 @@ go test ./node/blockchain/ -run TestGenesisMintsNothing -v</pre>
     <blockquote>
       <p>
         <strong>Where the project actually stands.</strong> Lattice is alpha software at
-        version 0.1.0. A single mainnet node is running &mdash; the one feeding the panel
-        above &mdash; but the chain is still at height 0, because mining needs the GPU
-        miner and nobody has pointed one at it. There are no other peers, the DNS seeds
+        version 0.1.0. A single mainnet node is running, the one feeding the panel
+        above, and the project's own GPU miner (on a gaming card) is the one producing its
+        blocks. There are no other peers, the DNS seeds
         don't resolve yet, and LATT has no price because there is nowhere to trade it and
         nothing to trade. Run it on simnet, read the code, tell us what's wrong with it.
         Please don't treat it as an investment &mdash; there is nothing to invest in yet.
@@ -801,6 +803,7 @@ go test ./node/blockchain/ -run TestGenesisMintsNothing -v</pre>
       <a href="https://github.com/codeminute-the-dev/lattice">Source code</a>
       <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/emission.md">Emission</a>
       <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/solo-mining.md">Mining guide</a>
+      <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/gpu-mining.md">GPU mining</a>
       <a href="https://github.com/codeminute-the-dev/lattice/blob/main/docs/anti-asic.md">ASIC policy</a>
       <a href="/status">Live emission data</a>
       <a href="https://github.com/pearl-research-labs/pearl">Pearl (upstream)</a>
