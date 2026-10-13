@@ -60,6 +60,9 @@ def rand_i8(*shape, seed):
     return torch.randint(-64, 64, shape, generator=g, dtype=torch.int8)
 
 
+# 0 and 1 are the tensor core kernels (sm_80+); 2 (dp4a) runs everywhere.
+CONFIGS = [2] + ([0, 1] if torch.cuda.get_device_capability()[0] >= 8 else [])
+
 SHAPES = [
     (128, 128, 128),
     (256, 384, 1024),
@@ -71,7 +74,7 @@ SHAPES = [
 ]
 
 
-@pytest.mark.parametrize("config", [0, 1])
+@pytest.mark.parametrize("config", CONFIGS)
 @pytest.mark.parametrize("m,n,k", SHAPES)
 def test_matches_reference(m, n, k, config):
     A = rand_i8(m, k, seed=1)
@@ -88,7 +91,7 @@ def test_matches_reference(m, n, k, config):
     assert hit is None  # target 0 is unreachable
 
 
-@pytest.mark.parametrize("config", [0, 1])
+@pytest.mark.parametrize("config", CONFIGS)
 def test_target_check(config):
     m, n, k = 256, 256, 1024
     A, Bt = rand_i8(m, k, seed=3), rand_i8(n, k, seed=4)

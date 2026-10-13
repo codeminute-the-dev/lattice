@@ -46,7 +46,7 @@ def random_operands(m: int, n: int, k: int, device="cuda", generator=None):
     return A, Bt
 
 
-def attempt(job: MiningJob, A: torch.Tensor, Bt: torch.Tensor, config: int = 1) -> Hit | None:
+def attempt(job: MiningJob, A: torch.Tensor, Bt: torch.Tensor, config: int | None = None) -> Hit | None:
     """Run one noised GEMM for `job` on operands (A: m x k, Bt: n x k)."""
     m, k = A.shape
     n = Bt.shape[0]

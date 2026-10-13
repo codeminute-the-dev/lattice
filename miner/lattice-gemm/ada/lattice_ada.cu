@@ -13,8 +13,8 @@
 //     single keyed BLAKE3 block and compared (as a little-endian uint256)
 //     with the target.
 //
-// Only SM80-class instructions are used (cp.async, mma.sync m16n8k32 s8), so
-// this runs on Ada and Ampere. XOR is commutative, so the result does not
+// Two kernels: tensor core (cp.async + mma.sync m16n8k32 s8, sm_80+: Ampere,
+// Ada) and a portable dp4a one (sm_61+: Pascal, Turing, anything newer). XOR is commutative, so the result does not
 // depend on how accumulators are distributed across threads.
 
 #include <cstdint>
@@ -305,28 +305,46 @@ __device__ bool le_uint256(const uint32_t h[8], const uint32_t* target) {
 
 // ---- tensor core / async copy helpers --------------------------------------
 
+// These need sm_80. Older targets still compile this file (for the dp4a
+// kernel) and never launch the kernels that call them.
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+#define LATTICE_NO_SM80 1
+#endif
+
 __device__ __forceinline__ void cp_async16(void* smem, const void* gmem,
                                            bool valid) {
+#ifdef LATTICE_NO_SM80
+  __trap();
+#else
   unsigned s = static_cast<unsigned>(__cvta_generic_to_shared(smem));
   int src_size = valid ? 16 : 0;  // 0 => zero fill
   asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;\n" ::"r"(s),
                "l"(gmem), "r"(src_size));
+#endif
 }
 __device__ __forceinline__ void cp_async_commit() {
+#ifndef LATTICE_NO_SM80
   asm volatile("cp.async.commit_group;\n" ::);
+#endif
 }
 template <int N>
 __device__ __forceinline__ void cp_async_wait() {
+#ifndef LATTICE_NO_SM80
   asm volatile("cp.async.wait_group %0;\n" ::"n"(N));
+#endif
 }
 
 __device__ __forceinline__ void mma_s8_16x8x32(int32_t c[4], const uint32_t a[4],
                                                const uint32_t b[2]) {
+#ifdef LATTICE_NO_SM80
+  __trap();
+#else
   asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32 "
       "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
       : "+r"(c[0]), "+r"(c[1]), "+r"(c[2]), "+r"(c[3])
       : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]));
+#endif
 }
 
 // ---- the kernel ------------------------------------------------------------
@@ -565,15 +583,243 @@ cudaError_t launch(const int8_t* A, const int8_t* Bt, int32_t* C, int m, int n,
   return cudaGetLastError();
 }
 
+
+// ---- portable kernel: dp4a, any GPU with compute capability >= 6.1 ---------
+//
+// No tensor cores and no async copies, so this runs on Pascal, Turing GTX 16xx
+// (which have no tensor cores at all) and everything newer.
+//
+// A warp covers (16*TM) rows x 32 columns of C: two hash tiles side by side
+// (one per half-warp) repeated TM times down. Each lane owns a 4x4 piece of
+// every tile its half-warp covers, so the XOR of a tile's 256 accumulators is a
+// 16-lane shuffle reduction.
+
+constexpr int kDpWarpsM = 2, kDpWarpsN = 4, kDpTM = 2;
+constexpr int kDpThreads = kDpWarpsM * kDpWarpsN * 32;
+constexpr int kDpBM = kDpWarpsM * kDpTM * kHashTile;      // 64
+constexpr int kDpBN = kDpWarpsN * 2 * kHashTile;          // 128
+constexpr int kDpStageBytes = (kDpBM + kDpBN) * kRowStride;
+constexpr int kDpGranules = kRowBytes / 16;
+constexpr int kDpLoadsPerThread = ((kDpBM + kDpBN) * kDpGranules + kDpThreads - 1) / kDpThreads;
+
+__global__ void __launch_bounds__(kDpThreads)
+    pow_gemm_dp4a_kernel(const int8_t* __restrict__ A, const int8_t* __restrict__ Bt,
+                         int32_t* __restrict__ C, int m, int n, int k,
+                         const uint32_t* __restrict__ key,
+                         const uint32_t* __restrict__ target,
+                         FoundSlot* __restrict__ found,
+                         uint32_t* __restrict__ transcripts_out, int tiles_w) {
+  extern __shared__ __align__(16) int8_t smem[];
+
+  const int tid = threadIdx.x;
+  const int warp = tid >> 5;
+  const int lane = tid & 31;
+  const int warp_m = warp / kDpWarpsN;
+  const int warp_n = warp % kDpWarpsN;
+  const int grp = lane >> 4;        // which hash tile column of the warp
+  const int sub = lane & 15;        // lane within the hash tile
+  const int sr = sub >> 2, sc = sub & 3;
+
+  const int block_row0 = blockIdx.y * kDpBM;
+  const int block_col0 = blockIdx.x * kDpBN;
+  const int warp_row0 = block_row0 + warp_m * kDpTM * kHashTile;
+  const int warp_col0 = block_col0 + warp_n * 2 * kHashTile;
+
+  const int num_chunks = (k + kRank - 1) / kRank;
+  const int full_chunks = k / kRank;
+
+  // Global -> registers -> shared, so the next chunk loads while this one computes.
+  uint4 stage_regs[kDpLoadsPerThread];
+  auto fetch = [&](int chunk) {
+    const int k0 = chunk * kRank;
+#pragma unroll
+    for (int l = 0; l < kDpLoadsPerThread; ++l) {
+      int idx = tid + l * kDpThreads;
+      uint4 v = make_uint4(0, 0, 0, 0);
+      if (idx < (kDpBM + kDpBN) * kDpGranules) {
+        int row = idx / kDpGranules;
+        int g = idx % kDpGranules;
+        int kk = k0 + g * 16;
+        if (kk < k) {
+          if (row < kDpBM) {
+            int grow = block_row0 + row;
+            if (grow < m) v = *reinterpret_cast<const uint4*>(A + (size_t)grow * k + kk);
+          } else {
+            int gcol = block_col0 + (row - kDpBM);
+            if (gcol < n) v = *reinterpret_cast<const uint4*>(Bt + (size_t)gcol * k + kk);
+          }
+        }
+      }
+      stage_regs[l] = v;
+    }
+  };
+  auto commit = [&](int stage) {
+    int8_t* base = smem + stage * kDpStageBytes;
+#pragma unroll
+    for (int l = 0; l < kDpLoadsPerThread; ++l) {
+      int idx = tid + l * kDpThreads;
+      if (idx < (kDpBM + kDpBN) * kDpGranules) {
+        int row = idx / kDpGranules;
+        int g = idx % kDpGranules;
+        *reinterpret_cast<uint4*>(base + row * kRowStride + g * 16) = stage_regs[l];
+      }
+    }
+  };
+
+  int32_t acc[kDpTM][4][4];
+#pragma unroll
+  for (int i = 0; i < kDpTM; ++i)
+#pragma unroll
+    for (int a = 0; a < 4; ++a)
+#pragma unroll
+      for (int b = 0; b < 4; ++b) acc[i][a][b] = 0;
+
+  uint32_t transcript[kDpTM];
+#pragma unroll
+  for (int i = 0; i < kDpTM; ++i) transcript[i] = 0;
+
+  // Row/col of this lane's 4x4 piece inside the block tile.
+  const int a_row = warp_m * kDpTM * kHashTile + sr * 4;
+  const int b_row = warp_n * 2 * kHashTile + grp * kHashTile + sc * 4;
+
+  fetch(0);
+  commit(0);
+  __syncthreads();
+
+  for (int chunk = 0; chunk < num_chunks; ++chunk) {
+    if (chunk + 1 < num_chunks) fetch(chunk + 1);
+
+    const int8_t* sA = smem + (chunk & 1) * kDpStageBytes;
+    const int8_t* sB = sA + kDpBM * kRowStride;
+
+#pragma unroll 4
+    for (int kw = 0; kw < kRowBytes / 4; ++kw) {
+      int bw[4];
+#pragma unroll
+      for (int b = 0; b < 4; ++b)
+        bw[b] = *reinterpret_cast<const int*>(sB + (b_row + b) * kRowStride + kw * 4);
+#pragma unroll
+      for (int i = 0; i < kDpTM; ++i) {
+#pragma unroll
+        for (int a = 0; a < 4; ++a) {
+          int aw = *reinterpret_cast<const int*>(
+              sA + (a_row + i * kHashTile + a) * kRowStride + kw * 4);
+#pragma unroll
+          for (int b = 0; b < 4; ++b) acc[i][a][b] = __dp4a(aw, bw[b], acc[i][a][b]);
+        }
+      }
+    }
+
+    if (chunk < full_chunks) {
+      const int idx = chunk % kTranscriptWords;
+#pragma unroll
+      for (int i = 0; i < kDpTM; ++i) {
+        uint32_t x = 0;
+#pragma unroll
+        for (int a = 0; a < 4; ++a)
+#pragma unroll
+          for (int b = 0; b < 4; ++b) x ^= (uint32_t)acc[i][a][b];
+#pragma unroll
+        for (int off = 8; off > 0; off >>= 1) x ^= __shfl_xor_sync(0xffffffffu, x, off);
+        if (sub == idx) transcript[i] = rotl32(transcript[i], kHashRotation) ^ x;
+      }
+    }
+
+    if (chunk + 1 < num_chunks) commit((chunk + 1) & 1);
+    __syncthreads();
+  }
+
+  // Write C.
+#pragma unroll
+  for (int i = 0; i < kDpTM; ++i) {
+#pragma unroll
+    for (int a = 0; a < 4; ++a) {
+      int row = warp_row0 + i * kHashTile + sr * 4 + a;
+      int col = warp_col0 + grp * kHashTile + sc * 4;
+      if (row >= m) continue;
+      if (col + 3 < n && (((size_t)row * n + col) & 3) == 0) {
+        *reinterpret_cast<int4*>(C + (size_t)row * n + col) =
+            make_int4(acc[i][a][0], acc[i][a][1], acc[i][a][2], acc[i][a][3]);
+      } else {
+#pragma unroll
+        for (int b = 0; b < 4; ++b)
+          if (col + b < n) C[(size_t)row * n + col + b] = acc[i][a][b];
+      }
+    }
+  }
+
+  if (full_chunks == 0) return;  // uniform across the block
+#pragma unroll
+  for (int i = 0; i < kDpTM; ++i) {
+    // Every lane fetches its own tile's 16 words (full-warp shuffles).
+    uint32_t msg[16];
+#pragma unroll
+    for (int w = 0; w < 16; ++w) msg[w] = __shfl_sync(0xffffffffu, transcript[i], grp * 16 + w);
+
+    const int tr = warp_row0 + i * kHashTile;
+    const int tc = warp_col0 + grp * kHashTile;
+    if (tr + kHashTile > m || tc + kHashTile > n) continue;  // per half-warp
+
+    if (transcripts_out != nullptr && sub < 16) {
+      transcripts_out[((size_t)(tr / kHashTile) * tiles_w + (tc / kHashTile)) * 16 + sub] = msg[sub];
+    }
+    if (sub == 0 && key != nullptr && target != nullptr && found != nullptr) {
+      uint32_t kk[8], tt[8], hh[8];
+#pragma unroll
+      for (int w = 0; w < 8; ++w) {
+        kk[w] = key[w];
+        tt[w] = target[w];
+      }
+      blake3_keyed_single_block(kk, msg, hh);
+      if (le_uint256(hh, tt)) {
+        if (atomicCAS(&found->flag, 0, 1) == 0) {
+          found->row = tr;
+          found->col = tc;
+          __threadfence();
+          atomicExch(&found->flag, 2);
+        }
+      }
+    }
+  }
+}
+
+cudaError_t launch_dp4a(const int8_t* A, const int8_t* Bt, int32_t* C, int m, int n,
+                        int k, const uint32_t* key, const uint32_t* target,
+                        FoundSlot* found, uint32_t* transcripts_out, int tiles_w,
+                        cudaStream_t stream) {
+  size_t smem = 2 * (size_t)kDpStageBytes;
+  cudaError_t e = cudaFuncSetAttribute(
+      pow_gemm_dp4a_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, (int)smem);
+  if (e != cudaSuccess) return e;
+  dim3 grid((n + kDpBN - 1) / kDpBN, (m + kDpBM - 1) / kDpBM);
+  pow_gemm_dp4a_kernel<<<grid, kDpThreads, smem, stream>>>(
+      A, Bt, C, m, n, k, key, target, found, transcripts_out, tiles_w);
+  return cudaGetLastError();
+}
+
 }  // namespace
 
 extern "C" {
+
+// -1 if the current device is too old (needs compute capability >= 6.1).
+int lattice_ada_best_config() {
+  int dev = 0;
+  cudaDeviceProp p;
+  if (cudaGetDevice(&dev) != cudaSuccess) return -1;
+  if (cudaGetDeviceProperties(&p, dev) != cudaSuccess) return -1;
+  int cc = p.major * 10 + p.minor;
+  if (cc >= 80) return 1;
+  if (cc >= 61) return 2;
+  return -1;
+}
 
 // found: device int32[3] {flag, row, col}; must be zeroed by the caller.
 //        flag == 2 after the kernel means a hash tile met the target and
 //        (row, col) is its top-left corner in C.
 // transcripts_out: optional device uint32[(m/16)*(n/16)*16], for testing.
-// config: 0 = 32x64 block (1 hash tile per warp), 1 = 64x128 block (4 per warp)
+// config: 0 = 32x64 block (1 hash tile per warp), 1 = 64x128 block (4 per warp),
+//         both tensor core kernels (sm_80+); 2 = dp4a kernel (sm_61+, any GPU).
+//         lattice_ada_best_config() picks one for the current device.
 int lattice_ada_pow_gemm(const int8_t* A, const int8_t* Bt, int32_t* C, int m,
                          int n, int k, const uint32_t* key,
                          const uint32_t* target, int32_t* found,
@@ -583,7 +829,9 @@ int lattice_ada_pow_gemm(const int8_t* A, const int8_t* Bt, int32_t* C, int m,
   const int tiles_w = n / kHashTile;
   FoundSlot* f = reinterpret_cast<FoundSlot*>(found);
   cudaError_t e;
-  if (config == 0)
+  if (config == 2)
+    e = launch_dp4a(A, Bt, C, m, n, k, key, target, f, transcripts_out, tiles_w, s);
+  else if (config == 0)
     e = launch<2, 4, 1, 1>(A, Bt, C, m, n, k, key, target, f, transcripts_out, tiles_w, s);
   else
     e = launch<2, 4, 2, 2>(A, Bt, C, m, n, k, key, target, f, transcripts_out, tiles_w, s);

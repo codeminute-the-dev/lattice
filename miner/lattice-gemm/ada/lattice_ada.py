@@ -1,4 +1,4 @@
-"""ctypes wrapper for the sm_89 PoW GEMM (lattice_ada.cu).
+"""ctypes wrapper for the PoW GEMM (lattice_ada.cu), any NVIDIA GPU from Pascal up.
 
 Build the shared library first:  make -C miner/lattice-gemm/ada
 """
@@ -21,6 +21,8 @@ def _lib():
         _LIB.lattice_ada_pow_gemm.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3 + [
             ctypes.c_void_p
         ] * 4 + [ctypes.c_int, ctypes.c_void_p]
+        _LIB.lattice_ada_best_config.restype = ctypes.c_int
+        _LIB.lattice_ada_best_config.argtypes = []
         _LIB.lattice_ada_blake3_scratch_words.restype = ctypes.c_size_t
         _LIB.lattice_ada_blake3_scratch_words.argtypes = [ctypes.c_size_t]
         _LIB.lattice_ada_blake3_keyed.restype = ctypes.c_int
@@ -57,10 +59,24 @@ def words_le(value: int) -> torch.Tensor:
     return torch.tensor([w - (1 << 32) if w >= 1 << 31 else w for w in ws], dtype=torch.int32)
 
 
-def pow_gemm(A, Bt, key_bytes: bytes, target: int, config: int = 1, want_transcripts=False):
+def best_config(device=None) -> int:
+    """Kernel for a device: 1 = tensor cores (sm_80+), 2 = dp4a (sm_61+)."""
+    forced = os.environ.get("LATTICE_ADA_CONFIG")  # 0/1/2, to force a kernel
+    if forced:
+        return int(forced)
+    if device is not None:
+        torch.cuda.set_device(device)
+    c = _lib().lattice_ada_best_config()
+    if c < 0:
+        raise RuntimeError("GPU too old: the miner needs compute capability >= 6.1 (GTX 10xx or newer)")
+    return c
+
+
+def pow_gemm(A, Bt, key_bytes: bytes, target: int, config: int | None = None, want_transcripts=False):
     """C = A @ Bt.T with PoW transcript hashing.
 
     A: (m, k) int8 CUDA, Bt: (n, k) int8 CUDA (B stored K-major), k % 16 == 0.
+    config None picks the kernel for the device (best_config).
     Returns (C int32 (m, n), found (row, col) or None, transcripts or None).
     """
     assert A.dtype == torch.int8 and Bt.dtype == torch.int8 and A.is_cuda and Bt.is_cuda
@@ -70,6 +86,8 @@ def pow_gemm(A, Bt, key_bytes: bytes, target: int, config: int = 1, want_transcr
     n, k2 = Bt.shape
     assert k == k2
     dev = A.device
+    if config is None:
+        config = best_config(dev)
     C = torch.empty((m, n), dtype=torch.int32, device=dev)
     key = torch.tensor(
         [int.from_bytes(key_bytes[4 * i : 4 * i + 4], "little", signed=True) for i in range(8)],
