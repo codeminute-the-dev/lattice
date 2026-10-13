@@ -30,6 +30,7 @@ def main():
     client = MiningClient(MinerRpcConfig())
     job = client.get_mining_info()
     job_at = time.time()
+    solved = None  # header of the last job we submitted a block for
     attempts = tiles = blocks = 0
     t0 = last = time.time()
     tiles_per_attempt = (args.m // 16) * (args.n // 16)
@@ -47,10 +48,13 @@ def main():
         hit = ada_miner.attempt(job, A, Bt)
         attempts += 1
         tiles += tiles_per_attempt
+        if hit and job.incomplete_header_bytes == solved:
+            hit = None  # block for this template already submitted; wait for the next one
         if hit:
             proof = ada_miner.make_proof(job, hit)
             try:
                 client.submit_plain_proof(proof, job)
+                solved = job.incomplete_header_bytes
                 blocks += 1
                 print(f"submitted block proof for tile ({hit.row}, {hit.col})")
             except Exception as e:
