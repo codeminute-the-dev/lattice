@@ -18,7 +18,6 @@ from lattice_gateway.comm.mining_configuration import LatticeMiningConfiguration
 from lattice_mining import PlainProof
 from miner_base.block_submission import create_proof
 from miner_base.commitment_hash import CommitmentHasher
-from miner_base.matrix_merkle_tree import MatrixMerkleTree
 
 import lattice_ada
 
@@ -54,9 +53,9 @@ def attempt(job: MiningJob, A: torch.Tensor, Bt: torch.Tensor, config: int = 1) 
     cfg = mining_config(k)
     key = CommitmentHasher.get_key(job.incomplete_header_bytes, cfg)
 
-    A_cpu, Bt_cpu = A.cpu(), Bt.cpu()
-    root_a = MatrixMerkleTree(A_cpu, key).root
-    root_b = MatrixMerkleTree(Bt_cpu, key).root
+    key_words = lattice_ada._words(key, A.device)
+    root_a = lattice_ada.merkle_root(A, key_words)
+    root_b = lattice_ada.merkle_root(Bt, key_words)
     commitment = CommitmentHasher.commitment_hash_from_merkle_roots(
         root_a,
         root_b,
@@ -77,8 +76,8 @@ def attempt(job: MiningJob, A: torch.Tensor, Bt: torch.Tensor, config: int = 1) 
     opened = OpenedBlockInfo(
         A_row_indices=list(range(r, r + HASH_TILE)),
         B_column_indices=list(range(c, c + HASH_TILE)),
-        A=A_cpu,
-        B_t=Bt_cpu,
+        A=A.cpu(),  # host copies only on a hit
+        B_t=Bt.cpu(),
         commitment_hash=commitment,
         noise_rank=RANK,
     )

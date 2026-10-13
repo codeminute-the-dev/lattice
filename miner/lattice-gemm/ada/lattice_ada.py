@@ -21,6 +21,17 @@ def _lib():
         _LIB.lattice_ada_pow_gemm.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3 + [
             ctypes.c_void_p
         ] * 4 + [ctypes.c_int, ctypes.c_void_p]
+        _LIB.lattice_ada_blake3_scratch_words.restype = ctypes.c_size_t
+        _LIB.lattice_ada_blake3_scratch_words.argtypes = [ctypes.c_size_t]
+        _LIB.lattice_ada_blake3_keyed.restype = ctypes.c_int
+        _LIB.lattice_ada_blake3_keyed.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_size_t,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+        ]
         _LIB.lattice_ada_noise_uniform.restype = ctypes.c_int
         _LIB.lattice_ada_noise_uniform.argtypes = [ctypes.c_void_p] * 3 + [
             ctypes.c_int,
@@ -168,3 +179,23 @@ def noise_operands(A, Bt, key_A: bytes, key_B: bytes):
     EBR = noise_uniform(key_B, _SEED_B, n, dev)
     pb, qb = noise_perm(key_B, _SEED_B, k, dev)
     return apply_noise(A, EAL, pa, qa), apply_noise(Bt, EBR, pb, qb)
+
+
+def merkle_root(t: torch.Tensor, key_words: torch.Tensor) -> bytes:
+    """Merkle root (keyed BLAKE3 of the zero-padded bytes) of an int8 CUDA tensor.
+
+    key_words: the 32-byte key as 8 int32 words on the same device (see `_words`).
+    """
+    t = t.contiguous()
+    nbytes = t.numel()
+    lib = _lib()
+    scratch = torch.empty(lib.lattice_ada_blake3_scratch_words(nbytes), dtype=torch.int32, device=t.device)
+    out = torch.empty(8, dtype=torch.int32, device=t.device)
+    _check(
+        lib.lattice_ada_blake3_keyed(
+            t.data_ptr(), nbytes, key_words.data_ptr(), scratch.data_ptr(), out.data_ptr(),
+            _stream(t.device),
+        ),
+        "blake3_keyed",
+    )
+    return out.cpu().numpy().tobytes()

@@ -156,3 +156,19 @@ def test_noised_operands_match_reference():
     got_A, got_Bt = lattice_ada.noise_operands(A.cuda(), Bt.cuda(), key_A, key_B)
     assert torch.equal(got_A.cpu(), A_noised)
     assert torch.equal(got_Bt.cpu().T, B_noised)
+
+
+# ---- GPU Merkle root vs the CPU/Rust tree -----------------------------------
+
+@pytest.mark.parametrize(
+    "shape",
+    [(1, 16), (16, 64), (1, 1025), (100, 1000), (130, 2056), (2048, 2048), (3000, 2048), (4097, 1024)],
+)
+def test_gpu_merkle_root_matches_cpu(shape):
+    from miner_base.matrix_merkle_tree import MatrixMerkleTree
+
+    key = os.urandom(32)
+    t = rand_i8(*shape, seed=9)
+    want = MatrixMerkleTree(t, key).root
+    got = lattice_ada.merkle_root(t.cuda(), lattice_ada._words(key, "cuda"))
+    assert got == want

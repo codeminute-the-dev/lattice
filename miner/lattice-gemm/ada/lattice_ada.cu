@@ -171,6 +171,129 @@ __global__ void apply_noise_kernel(const int8_t* X, const int8_t* L,
   out[idx] = (int8_t)v;
 }
 
+
+// ---- BLAKE3 keyed tree hash of a byte buffer ----------------------------
+// The Merkle root of a matrix is exactly BLAKE3(key, data zero-padded to a
+// multiple of 1024 bytes). One thread hashes one 1 KB chunk; parents are
+// combined level by level, an odd node at the end of a level is promoted
+// unchanged (this reproduces BLAKE3's left-full binary tree).
+
+__constant__ uint32_t kIVfull[8] = {0x6A09E667u, 0xBB67AE85u, 0x3C6EF372u,
+                                    0xA54FF53Au, 0x510E527Fu, 0x9B05688Cu,
+                                    0x1F83D9ABu, 0x5BE0CD19u};
+
+__device__ void blake3_compress_cv(const uint32_t cv[8], const uint32_t msg_in[16],
+                                   uint32_t counter, uint32_t block_len,
+                                   uint32_t flags, uint32_t out[8]) {
+  uint32_t m[16];
+#pragma unroll
+  for (int i = 0; i < 16; ++i) m[i] = msg_in[i];
+  uint32_t v[16];
+#pragma unroll
+  for (int i = 0; i < 8; ++i) v[i] = cv[i];
+  v[8] = kIVfull[0];
+  v[9] = kIVfull[1];
+  v[10] = kIVfull[2];
+  v[11] = kIVfull[3];
+  v[12] = counter;
+  v[13] = 0;
+  v[14] = block_len;
+  v[15] = flags;
+#pragma unroll
+  for (int r = 0; r < 7; ++r) {
+    B3_G(0, 4, 8, 12, m[0], m[1]);
+    B3_G(1, 5, 9, 13, m[2], m[3]);
+    B3_G(2, 6, 10, 14, m[4], m[5]);
+    B3_G(3, 7, 11, 15, m[6], m[7]);
+    B3_G(0, 5, 10, 15, m[8], m[9]);
+    B3_G(1, 6, 11, 12, m[10], m[11]);
+    B3_G(2, 7, 8, 13, m[12], m[13]);
+    B3_G(3, 4, 9, 14, m[14], m[15]);
+    if (r < 6) {
+      uint32_t t[16];
+#pragma unroll
+      for (int i = 0; i < 16; ++i) t[i] = m[i];
+      m[0] = t[2];  m[1] = t[6];  m[2] = t[3];   m[3] = t[10];
+      m[4] = t[7];  m[5] = t[0];  m[6] = t[4];   m[7] = t[13];
+      m[8] = t[1];  m[9] = t[11]; m[10] = t[12]; m[11] = t[5];
+      m[12] = t[9]; m[13] = t[14]; m[14] = t[15]; m[15] = t[8];
+    }
+  }
+#pragma unroll
+  for (int i = 0; i < 8; ++i) out[i] = v[i] ^ v[i + 8];
+}
+
+constexpr uint32_t F_CHUNK_START = 1, F_CHUNK_END = 2, F_PARENT = 4, F_ROOT = 8,
+                   F_KEYED = 16;
+
+// data: `len` bytes; chunks past len are zero. Writes one CV per chunk.
+__global__ void b3_chunk_kernel(const uint8_t* __restrict__ data, size_t len,
+                                const uint32_t* __restrict__ key,
+                                uint32_t* __restrict__ cvs, uint32_t num_chunks) {
+  uint32_t chunk = blockIdx.x * blockDim.x + threadIdx.x;
+  if (chunk >= num_chunks) return;
+  uint32_t cv[8];
+#pragma unroll
+  for (int i = 0; i < 8; ++i) cv[i] = key[i];
+  const size_t base = (size_t)chunk * 1024;
+  for (int b = 0; b < 16; ++b) {
+    uint32_t msg[16];
+    const size_t off = base + (size_t)b * 64;
+    if (off + 64 <= len) {
+      const uint4* src = reinterpret_cast<const uint4*>(data + off);
+#pragma unroll
+      for (int i = 0; i < 4; ++i) {
+        uint4 w = src[i];
+        msg[4 * i] = w.x; msg[4 * i + 1] = w.y; msg[4 * i + 2] = w.z; msg[4 * i + 3] = w.w;
+      }
+    } else {
+      // partial or fully padded block: byte-wise with zero fill
+      uint8_t tmp[64];
+      for (int i = 0; i < 64; ++i) tmp[i] = (off + i < len) ? data[off + i] : 0;
+#pragma unroll
+      for (int i = 0; i < 16; ++i)
+        msg[i] = (uint32_t)tmp[4 * i] | ((uint32_t)tmp[4 * i + 1] << 8) |
+                 ((uint32_t)tmp[4 * i + 2] << 16) | ((uint32_t)tmp[4 * i + 3] << 24);
+    }
+    uint32_t flags = F_KEYED;
+    if (b == 0) flags |= F_CHUNK_START;
+    if (b == 15) {
+      flags |= F_CHUNK_END;
+      if (num_chunks == 1) flags |= F_ROOT;
+    }
+    uint32_t out[8];
+    blake3_compress_cv(cv, msg, chunk, 64, flags, out);
+#pragma unroll
+    for (int i = 0; i < 8; ++i) cv[i] = out[i];
+  }
+#pragma unroll
+  for (int i = 0; i < 8; ++i) cvs[(size_t)chunk * 8 + i] = cv[i];
+}
+
+// One level: parent i = compress(key, cv[2i] || cv[2i+1]); odd tail promoted.
+__global__ void b3_parent_kernel(const uint32_t* __restrict__ in,
+                                 uint32_t* __restrict__ out,
+                                 const uint32_t* __restrict__ key, uint32_t n_in,
+                                 bool is_root) {
+  uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t n_out = (n_in + 1) / 2;
+  if (i >= n_out) return;
+  if (2 * i + 1 >= n_in) {  // odd one out
+#pragma unroll
+    for (int w = 0; w < 8; ++w) out[(size_t)i * 8 + w] = in[(size_t)(2 * i) * 8 + w];
+    return;
+  }
+  uint32_t msg[16], cv[8], res[8];
+#pragma unroll
+  for (int w = 0; w < 16; ++w) msg[w] = in[(size_t)(2 * i) * 8 + w];
+#pragma unroll
+  for (int w = 0; w < 8; ++w) cv[w] = key[w];
+  uint32_t flags = F_PARENT | F_KEYED | (is_root ? F_ROOT : 0);
+  blake3_compress_cv(cv, msg, 0, 64, flags, res);
+#pragma unroll
+  for (int w = 0; w < 8; ++w) out[(size_t)i * 8 + w] = res[w];
+}
+
 // hash <= target as little-endian uint256 (word 7 most significant).
 __device__ bool le_uint256(const uint32_t h[8], const uint32_t* target) {
   for (int i = 7; i >= 0; --i) {
@@ -486,6 +609,34 @@ int lattice_ada_apply_noise(const int8_t* X, const int8_t* L, const int32_t* p,
                             void* stream) {
   size_t total = (size_t)rows * k;
   apply_noise_kernel<<<(unsigned)((total + 255) / 256), 256, 0, (cudaStream_t)stream>>>(X, L, p, q, out, rows, k);
+  return (int)cudaGetLastError();
+}
+
+// Number of uint32 words of scratch lattice_ada_blake3_keyed needs: 2 * chunks * 8.
+size_t lattice_ada_blake3_scratch_words(size_t len) {
+  size_t chunks = (len + 1023) / 1024;
+  if (chunks == 0) chunks = 1;
+  return 2 * chunks * 8;
+}
+
+// BLAKE3 keyed hash of `len` bytes (zero padded to a 1024 multiple) -> 8 words.
+int lattice_ada_blake3_keyed(const uint8_t* data, size_t len, const uint32_t* key,
+                             uint32_t* scratch, uint32_t* out, void* stream) {
+  cudaStream_t st = static_cast<cudaStream_t>(stream);
+  uint32_t chunks = (uint32_t)((len + 1023) / 1024);
+  if (chunks == 0) chunks = 1;
+  uint32_t* a = scratch;
+  uint32_t* b = scratch + (size_t)chunks * 8;
+  b3_chunk_kernel<<<(chunks + 63) / 64, 64, 0, st>>>(data, len, key, a, chunks);
+  uint32_t n = chunks;
+  while (n > 1) {
+    uint32_t n_out = (n + 1) / 2;
+    b3_parent_kernel<<<(n_out + 127) / 128, 128, 0, st>>>(a, b, key, n, n_out == 1);
+    uint32_t* t = a; a = b; b = t;
+    n = n_out;
+  }
+  cudaError_t e = cudaMemcpyAsync(out, a, 32, cudaMemcpyDeviceToDevice, st);
+  if (e != cudaSuccess) return (int)e;
   return (int)cudaGetLastError();
 }
 

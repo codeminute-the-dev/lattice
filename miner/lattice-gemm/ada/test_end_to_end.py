@@ -11,6 +11,14 @@ import ada_miner
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA GPU")
 
 
+# The job target is multiplied by tile size (256) * k/rank (16) * 128 = 2^19 (k=2048),
+# so 2^227 becomes 2^246: one tile in 1024 qualifies. Rare enough that a proof checked
+# against the wrong derivation is almost never accepted by chance, common enough that
+# a 512x512 attempt (1024 tiles) usually finds one.
+EASY_NBITS = 0x1D080000
+EASY_TARGET = 1 << 227
+
+
 def header(nbits):
     return IncompleteBlockHeader(
         version=0x20000000,
@@ -35,11 +43,8 @@ def mine(cert_version, nbits, target, m=256, n=256, k=2048, tries=200):
 
 @pytest.mark.parametrize("cert", [CertificateVersion.ZK_V3])
 def test_verifier_accepts_gpu_proof(cert):
-    # Easy enough that about half of all tiles hit: the job target is multiplied by
-    # tile size (256) * k/rank (16) * 128 = 2^19, so 2^236 becomes 2^255.
-    nbits = 0x1E100000
-    target = 1 << 236
-    job, h, hit, tries = mine(cert, nbits, target)
+    nbits, target = EASY_NBITS, EASY_TARGET
+    job, h, hit, tries = mine(cert, nbits, target, m=512, n=512)
     assert hit is not None, "no tile met the target"
     proof = ada_miner.make_proof(job, hit)
     ok, msg = verify_plain_proof_for_cert_version(int(cert), h, proof, nbits)
@@ -47,8 +52,8 @@ def test_verifier_accepts_gpu_proof(cert):
 
 
 def _mined():
-    nbits, target = 0x1E100000, 1 << 236
-    job, h, hit, _ = mine(CertificateVersion.ZK_V3, nbits, target)
+    nbits, target = EASY_NBITS, EASY_TARGET
+    job, h, hit, _ = mine(CertificateVersion.ZK_V3, nbits, target, m=512, n=512)
     assert hit is not None
     return job, h, ada_miner.make_proof(job, hit), nbits
 
