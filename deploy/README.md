@@ -137,3 +137,10 @@ against each other. If `latticed` wins the race at boot, its first outbound
 onion dials fail and then retry; inbound reachability is Tor's own business and
 is unaffected. Nothing to fix, but it explains a few seconds of noise in the log
 right after a reboot.
+
+## GPU miner
+
+`lattice-gateway.service` and `lattice-miner@.service` run the GPU miner next to
+the node, one miner instance per GPU. Setup (env file, install, enable) is in
+[`docs/gpu-mining.md`](../docs/gpu-mining.md#as-services); the env file template is
+`lattice-miner.env.example`.

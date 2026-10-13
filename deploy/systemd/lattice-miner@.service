@@ -1,0 +1,16 @@
+[Unit]
+Description=Lattice GPU miner on GPU %i
+After=lattice-gateway.service
+Wants=lattice-gateway.service
+
+[Service]
+Type=simple
+# One instance per GPU, numbered as in nvidia-smi:
+#   systemctl --user enable --now lattice-miner@0 lattice-miner@1
+EnvironmentFile=%h/.config/lattice/miner.env
+ExecStart=/bin/sh -c 'cd "$$LATTICE_REPO/miner/lattice-gemm/ada" && PYTHONPATH=. exec "$$LATTICE_VENV/bin/python" -u mine.py --device %i $$MINE_ARGS'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

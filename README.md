@@ -94,7 +94,7 @@ and there is no key that can force it: see [`docs/anti-asic.md`](docs/anti-asic.
 | [`plonky2/`](plonky2/) | Plonky2 SNARK proving system (Rust, vendored) |
 | [`xmss/`](xmss/) | XMSS post-quantum signatures (C + Go FFI) |
 | [`lattice-blake3/`](lattice-blake3/) | Blake3 hashing utilities (Rust) |
-| [`miner/`](miner/) | vLLM miner — GPU mining infrastructure (Python/CUDA) |
+| [`miner/`](miner/) | GPU miners (Python/CUDA): a native one for GTX 10xx and newer cards, and the Hopper vLLM miner. See [`docs/gpu-mining.md`](docs/gpu-mining.md) |
 | [`dnsseeder/`](dnsseeder/), [`coredns-dnsseed/`](coredns-dnsseed/) | DNS seeders |
 | [`apps/`](apps/) | Frontend applications (desktop wallet) |
 | [`website/`](website/) | The public site at lattice.codeminute.dev |

@@ -81,8 +81,10 @@ On simnet you can mine blocks directly:
 ./bin/latctl --simnet -u rpcuser -P rpcpass generate 10
 ```
 
-On testnet or mainnet, mining runs through the GPU miner. It has two parts:
-`lattice-gateway` (bridges to the node) and `vllm-miner` (does the matmul work).
+On testnet or mainnet, mining runs through the GPU miner. For ordinary NVIDIA
+gaming cards (GTX 10xx and newer) follow the [GPU mining guide](gpu-mining.md).
+The reference `vllm-miner` needs Hopper-class hardware. Either way there are two
+parts: `lattice-gateway` (bridges to the node) and a miner (does the matmul work).
 
 ```bash
 export LATTICED_RPC_URL="http://localhost:44109"

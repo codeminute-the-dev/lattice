@@ -1,0 +1,16 @@
+[Unit]
+Description=Lattice mining gateway (node <-> GPU miner)
+After=latticed.service
+Wants=latticed.service
+
+[Service]
+Type=simple
+# LATTICE_VENV, LATTICED_* and MINER_RPC_SOCKET_PATH come from the env file;
+# see lattice-miner.env.example. $$ is a literal $ for the shell.
+EnvironmentFile=%h/.config/lattice/miner.env
+ExecStart=/bin/sh -c 'exec "$$LATTICE_VENV/bin/lattice-gateway" start'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
