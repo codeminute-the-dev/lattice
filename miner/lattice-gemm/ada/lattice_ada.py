@@ -21,6 +21,22 @@ def _lib():
         _LIB.lattice_ada_pow_gemm.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3 + [
             ctypes.c_void_p
         ] * 4 + [ctypes.c_int, ctypes.c_void_p]
+        _LIB.lattice_ada_noise_uniform.restype = ctypes.c_int
+        _LIB.lattice_ada_noise_uniform.argtypes = [ctypes.c_void_p] * 3 + [
+            ctypes.c_int,
+            ctypes.c_void_p,
+        ]
+        _LIB.lattice_ada_noise_perm.restype = ctypes.c_int
+        _LIB.lattice_ada_noise_perm.argtypes = [ctypes.c_void_p] * 4 + [
+            ctypes.c_int,
+            ctypes.c_void_p,
+        ]
+        _LIB.lattice_ada_apply_noise.restype = ctypes.c_int
+        _LIB.lattice_ada_apply_noise.argtypes = [ctypes.c_void_p] * 5 + [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_void_p,
+        ]
     return _LIB
 
 
@@ -75,3 +91,80 @@ def pow_gemm(A, Bt, key_bytes: bytes, target: int, config: int = 1, want_transcr
     if tr is not None:
         tr = tr.view(torch.int32).view(m // 16, n // 16, 16).cpu()
     return C, hit, tr
+
+
+NOISE_RANK = 128
+_SEED_A = b"A_tensor" + b"\x00" * 24
+_SEED_B = b"B_tensor" + b"\x00" * 24
+
+
+def _words(b: bytes, dev) -> torch.Tensor:
+    assert len(b) == 32
+    return torch.tensor(
+        [int.from_bytes(b[4 * i : 4 * i + 4], "little", signed=True) for i in range(8)],
+        dtype=torch.int32,
+        device=dev,
+    )
+
+
+def _check(rc, what):
+    if rc != 0:
+        raise RuntimeError(f"{what} failed: cudaError {rc}")
+
+
+def _stream(dev):
+    return torch.cuda.current_stream(dev).cuda_stream
+
+
+def noise_uniform(key: bytes, seed: bytes, rows: int, dev) -> torch.Tensor:
+    """(rows, 128) int8 uniform noise, matching NoiseGenerator.__generate_uniform_random_matrix."""
+    out = torch.empty((rows, NOISE_RANK), dtype=torch.int8, device=dev)
+    k, s = _words(key, dev), _words(seed, dev)
+    _check(
+        _lib().lattice_ada_noise_uniform(
+            k.data_ptr(), s.data_ptr(), out.data_ptr(), rows, _stream(dev)
+        ),
+        "noise_uniform",
+    )
+    return out
+
+
+def noise_perm(key: bytes, seed: bytes, k: int, dev):
+    """(p, q) int32[k]: line c has +1 at p[c] and -1 at q[c]."""
+    p = torch.empty(k, dtype=torch.int32, device=dev)
+    q = torch.empty(k, dtype=torch.int32, device=dev)
+    kk, s = _words(key, dev), _words(seed, dev)
+    _check(
+        _lib().lattice_ada_noise_perm(
+            kk.data_ptr(), s.data_ptr(), p.data_ptr(), q.data_ptr(), k, _stream(dev)
+        ),
+        "noise_perm",
+    )
+    return p, q
+
+
+def apply_noise(X, L, p, q) -> torch.Tensor:
+    """out[i, c] = X[i, c] + L[i, p[c]] - L[i, q[c]] as int8."""
+    X = X.contiguous()
+    rows, k = X.shape
+    out = torch.empty_like(X)
+    _check(
+        _lib().lattice_ada_apply_noise(
+            X.data_ptr(), L.data_ptr(), p.data_ptr(), q.data_ptr(), out.data_ptr(), rows, k,
+            _stream(X.device),
+        ),
+        "apply_noise",
+    )
+    return out
+
+
+def noise_operands(A, Bt, key_A: bytes, key_B: bytes):
+    """Noised A (m, k) and noised Bt (n, k) for the given commitment seeds."""
+    dev = A.device
+    m, k = A.shape
+    n = Bt.shape[0]
+    EAL = noise_uniform(key_A, _SEED_A, m, dev)
+    pa, qa = noise_perm(key_A, _SEED_A, k, dev)
+    EBR = noise_uniform(key_B, _SEED_B, n, dev)
+    pb, qb = noise_perm(key_B, _SEED_B, k, dev)
+    return apply_noise(A, EAL, pa, qa), apply_noise(Bt, EBR, pb, qb)

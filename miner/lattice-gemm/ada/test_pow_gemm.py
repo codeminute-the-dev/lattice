@@ -111,3 +111,48 @@ def test_target_check(config):
     # Everything passes.
     _, hit, _ = lattice_ada.pow_gemm(A.cuda(), Bt.cuda(), key, 2**256 - 1, config=config)
     assert hit is not None
+
+
+# ---- noise generation vs miner_base.NoiseGenerator ---------------------------
+
+def _rank1_indices(M):
+    """For a matrix whose lines each hold one +1 and one -1, return (p, q)."""
+    p = (M == 1).to(torch.int64).argmax(dim=0)
+    q = (M == -1).to(torch.int64).argmax(dim=0)
+    return p, q
+
+
+@pytest.mark.parametrize("m,n,k", [(128, 128, 2048), (200, 300, 2056), (1024, 640, 4096)])
+def test_noise_matches_generator(m, n, k):
+    from miner_base.noise_generation import NoiseGenerator
+
+    key_A, key_B = os.urandom(32), os.urandom(32)
+    A_L, A_R, B_L, B_R = NoiseGenerator().generate_noise_metrices(key_A, key_B, m, k, n)
+
+    dev = "cuda"
+    EAL = lattice_ada.noise_uniform(key_A, lattice_ada._SEED_A, m, dev).cpu()
+    pa, qa = lattice_ada.noise_perm(key_A, lattice_ada._SEED_A, k, dev)
+    EBR = lattice_ada.noise_uniform(key_B, lattice_ada._SEED_B, n, dev).cpu()
+    pb, qb = lattice_ada.noise_perm(key_B, lattice_ada._SEED_B, k, dev)
+
+    assert torch.equal(EAL, A_L)
+    assert torch.equal(EBR, B_R.T.contiguous())
+    rp, rq = _rank1_indices(A_R)  # A_R: (128, k), one +1/-1 per column
+    assert torch.equal(pa.cpu().long(), rp) and torch.equal(qa.cpu().long(), rq)
+    rp, rq = _rank1_indices(B_L.T)  # B_L: (k, 128), one +1/-1 per row
+    assert torch.equal(pb.cpu().long(), rp) and torch.equal(qb.cpu().long(), rq)
+
+
+def test_noised_operands_match_reference():
+    from miner_base.noise_generation import NoiseGenerator
+
+    m, n, k = 256, 384, 2048
+    A, Bt = rand_i8(m, k, seed=5), rand_i8(n, k, seed=6)
+    key_A, key_B = os.urandom(32), os.urandom(32)
+    A_L, A_R, B_L, B_R = NoiseGenerator().generate_noise_metrices(key_A, key_B, m, k, n)
+    A_noised = A + (A_L.int() @ A_R.int()).to(torch.int8)
+    B_noised = Bt.T + (B_L.int() @ B_R.int()).to(torch.int8)  # (k, n)
+
+    got_A, got_Bt = lattice_ada.noise_operands(A.cuda(), Bt.cuda(), key_A, key_B)
+    assert torch.equal(got_A.cpu(), A_noised)
+    assert torch.equal(got_Bt.cpu().T, B_noised)

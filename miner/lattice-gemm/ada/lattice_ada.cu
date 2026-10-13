@@ -97,6 +97,80 @@ __device__ void blake3_keyed_single_block(const uint32_t key[8],
   for (int i = 0; i < 8; ++i) out[i] = v[i] ^ v[i + 8];
 }
 
+
+// ---- noise generation --------------------------------------------------
+// Mirrors miner-base/noise_generation.py. Draw `i` is
+//   blake3_keyed(key, int32[8]{0.. with [prepend] = 1 + i} || seed)
+// i.e. one 64-byte block: words 0..7 = prepend, words 8..15 = seed.
+
+__device__ void noise_draw(const uint32_t key[8], const uint32_t seed[8],
+                           int prepend, uint32_t index, uint32_t out[8]) {
+  uint32_t msg[16];
+#pragma unroll
+  for (int i = 0; i < 8; ++i) msg[i] = 0;
+  msg[prepend] = 1u + index;
+#pragma unroll
+  for (int i = 0; i < 8; ++i) msg[8 + i] = seed[i];
+  blake3_keyed_single_block(key, msg, out);
+}
+
+// Uniform int8 matrix (rows x 128): byte j of the draw stream -> (b & 63) - 32.
+__global__ void noise_uniform_kernel(const uint32_t* key, const uint32_t* seed,
+                                     int8_t* out, int rows) {
+  uint32_t draw = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t total = (uint32_t)rows * 128u / 32u;
+  if (draw >= total) return;
+  uint32_t kk[8], ss[8], h[8];
+  for (int i = 0; i < 8; ++i) { kk[i] = key[i]; ss[i] = seed[i]; }
+  noise_draw(kk, ss, 0, draw, h);
+  uint32_t* o = reinterpret_cast<uint32_t*>(out + (size_t)draw * 32);
+#pragma unroll
+  for (int w = 0; w < 8; ++w) {
+    uint32_t v = h[w], r = 0;
+#pragma unroll
+    for (int b = 0; b < 4; ++b) {
+      int32_t x = (int32_t)((v >> (8 * b)) & 63u) - 32;
+      r |= ((uint32_t)(x & 0xFF)) << (8 * b);
+    }
+    o[w] = r;
+  }
+}
+
+// Sparse +1/-1 structure: for line c (c < k), p[c] gets +1 and q[c] gets -1.
+__global__ void noise_perm_kernel(const uint32_t* key, const uint32_t* seed,
+                                  int32_t* p, int32_t* q, int k) {
+  uint32_t draw = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t total = ((uint32_t)k * 4u + 31u) / 32u;
+  if (draw >= total) return;
+  uint32_t kk[8], ss[8], h[8];
+  for (int i = 0; i < 8; ++i) { kk[i] = key[i]; ss[i] = seed[i]; }
+  noise_draw(kk, ss, 1, draw, h);
+#pragma unroll
+  for (int j = 0; j < 8; ++j) {
+    uint32_t c = draw * 8u + j;
+    if (c >= (uint32_t)k) break;
+    uint32_t r = h[j];
+    uint32_t first = r & 127u;
+    uint32_t mulhi = (uint32_t)(((uint64_t)127u * r) >> 32);
+    uint32_t second = first ^ (1u + mulhi);
+    p[c] = (int32_t)first;
+    q[c] = (int32_t)second;
+  }
+}
+
+// out[i, c] = X[i, c] + L[i, p[c]] - L[i, q[c]]   (X: rows x k, L: rows x 128)
+__global__ void apply_noise_kernel(const int8_t* X, const int8_t* L,
+                                   const int32_t* p, const int32_t* q,
+                                   int8_t* out, int rows, int k) {
+  size_t idx = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+  size_t total = (size_t)rows * k;
+  if (idx >= total) return;
+  int i = (int)(idx / k);
+  int c = (int)(idx % k);
+  int v = (int)X[idx] + (int)L[(size_t)i * 128 + p[c]] - (int)L[(size_t)i * 128 + q[c]];
+  out[idx] = (int8_t)v;
+}
+
 // hash <= target as little-endian uint256 (word 7 most significant).
 __device__ bool le_uint256(const uint32_t h[8], const uint32_t* target) {
   for (int i = 7; i >= 0; --i) {
@@ -391,6 +465,28 @@ int lattice_ada_pow_gemm(const int8_t* A, const int8_t* Bt, int32_t* C, int m,
   else
     e = launch<2, 4, 2, 2>(A, Bt, C, m, n, k, key, target, f, transcripts_out, tiles_w, s);
   return (int)e;
+}
+
+int lattice_ada_noise_uniform(const uint32_t* key, const uint32_t* seed,
+                              int8_t* out, int rows, void* stream) {
+  uint32_t total = (uint32_t)rows * 4u;
+  noise_uniform_kernel<<<(total + 127) / 128, 128, 0, (cudaStream_t)stream>>>(key, seed, out, rows);
+  return (int)cudaGetLastError();
+}
+
+int lattice_ada_noise_perm(const uint32_t* key, const uint32_t* seed, int32_t* p,
+                           int32_t* q, int k, void* stream) {
+  uint32_t total = ((uint32_t)k * 4u + 31u) / 32u;
+  noise_perm_kernel<<<(total + 127) / 128, 128, 0, (cudaStream_t)stream>>>(key, seed, p, q, k);
+  return (int)cudaGetLastError();
+}
+
+int lattice_ada_apply_noise(const int8_t* X, const int8_t* L, const int32_t* p,
+                            const int32_t* q, int8_t* out, int rows, int k,
+                            void* stream) {
+  size_t total = (size_t)rows * k;
+  apply_noise_kernel<<<(unsigned)((total + 255) / 256), 256, 0, (cudaStream_t)stream>>>(X, L, p, q, out, rows, k);
+  return (int)cudaGetLastError();
 }
 
 }  // extern "C"
