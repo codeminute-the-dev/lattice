@@ -456,7 +456,9 @@ install_default_configs() {
 
 	for name in $CONFIGS; do
 		dest=$(config_path "$name")
-		if config_has_secrets "$name" "$dest"; then
+		# Never replace a config that is already there, even one without RPC
+		# credentials: it may hold settings this script knows nothing about.
+		if [ -e "$dest" ]; then
 			info "kept existing config -> ${dest}"
 			continue
 		fi
